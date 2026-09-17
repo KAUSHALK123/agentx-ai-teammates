@@ -14,6 +14,7 @@ from app.schemas.execution import (
     TaskExecuteResponse,
     TaskExecutionDetailResponse,
 )
+from app.services.approval_store import get_approval_store
 from app.services.execution_engine import get_execution_engine
 from app.services.orchestrator import get_orchestrator
 from app.services.task_store import get_task_store
@@ -162,10 +163,20 @@ async def execute_task(task_id: str) -> TaskExecuteResponse:
     executed_task = await execution_engine.execute_task(task, agent, task.plan)
     await store.update_task(executed_task)
 
+    approval_data = None
+    if executed_task.status == TaskStatus.WAITING_FOR_APPROVAL and executed_task.result:
+        approval_data = executed_task.result.get("approval")
+    elif executed_task.current_approval_id:
+        appr_store = get_approval_store()
+        appr = await appr_store.get_approval(executed_task.current_approval_id)
+        if appr:
+            approval_data = appr.model_dump()
+
     return TaskExecuteResponse(
         task_id=executed_task.task_id,
         status=executed_task.status,
         selected_agent=executed_task.selected_agent.value if executed_task.selected_agent else None,
+        approval=approval_data,
         final_result=executed_task.result,
         error=executed_task.error,
         message=f"Task execution completed with status: {executed_task.status.value}",
@@ -190,6 +201,15 @@ async def get_task_execution(task_id: str) -> TaskExecutionDetailResponse:
     steps = task.plan.steps if task.plan else []
     selected_agent_str = task.selected_agent.value if task.selected_agent else None
 
+    approval_data = None
+    if task.current_approval_id:
+        appr_store = get_approval_store()
+        appr = await appr_store.get_approval(task.current_approval_id)
+        if appr:
+            approval_data = appr.model_dump()
+    elif task.result and isinstance(task.result, dict) and "approval" in task.result:
+        approval_data = task.result["approval"]
+
     return TaskExecutionDetailResponse(
         task_id=task.task_id,
         task_status=task.status,
@@ -198,6 +218,7 @@ async def get_task_execution(task_id: str) -> TaskExecutionDetailResponse:
         steps=steps,
         execution_records=task.execution_records,
         verification_status=task.verification_result,
+        approval=approval_data,
         final_result=task.result,
         error=task.error,
     )

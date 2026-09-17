@@ -6,6 +6,7 @@ from app.api.v1.health import router as health_router
 from app.api.v1.tasks import router as tasks_router
 from app.api.v1.agents import router as agents_router
 from app.api.v1.tools import router as tools_router
+from app.api.v1.approvals import router as approvals_router
 from app.api.v1 import api_v1_router
 from app.config.settings import get_settings
 
@@ -19,10 +20,10 @@ logger = logging.getLogger("agentx")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = get_settings()
-    logger.info("Starting %s (v%s) in %s mode", settings.app_name, settings.app_version, settings.agentx_env)
+    """Lifecycle hook for startup and shutdown logging."""
+    logger.info("Initializing AgentX Core Backend...")
     yield
-    logger.info("Shutting down AgentX backend service.")
+    logger.info("Shutting down AgentX Core Backend...")
 
 
 settings = get_settings()
@@ -30,7 +31,7 @@ settings = get_settings()
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="Autonomous AI Teammates for Business — Tool & Data Layer",
+    description="Autonomous AI Teammates for Business — Human-in-the-Loop Approval",
     lifespan=lifespan,
 )
 
@@ -48,6 +49,7 @@ app.include_router(health_router, tags=["Health"])
 app.include_router(tasks_router, prefix="/tasks", tags=["Tasks"])
 app.include_router(agents_router, prefix="/agents", tags=["Agents"])
 app.include_router(tools_router, prefix="/tools", tags=["Tools"])
+app.include_router(approvals_router, prefix="/approvals", tags=["Approvals"])
 
 # Also mount under /api/v1 prefix
 app.include_router(api_v1_router, prefix="/api/v1")
@@ -65,6 +67,7 @@ async def root():
         "tasks_url": "/tasks",
         "agents_url": "/agents",
         "tools_url": "/tools",
+        "approvals_url": "/approvals",
         "plan_url": "/tasks/plan",
     }
 

@@ -21,6 +21,11 @@ from .execution import (
     TaskExecutionDetailResponse,
     TaskExecuteResponse,
 )
+from .approval import (
+    ApprovalResponse,
+    ApprovalRejectRequest,
+    ApprovalDecisionResponse,
+)
 
 __all__ = [
     "TaskCreateRequest",
@@ -38,4 +43,7 @@ __all__ = [
     "TaskFinalResult",
     "TaskExecutionDetailResponse",
     "TaskExecuteResponse",
+    "ApprovalResponse",
+    "ApprovalRejectRequest",
+    "ApprovalDecisionResponse",
 ]

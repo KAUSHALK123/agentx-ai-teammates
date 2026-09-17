@@ -60,6 +60,16 @@ class InMemoryTaskStore(BaseTaskStore):
             tasks.sort(key=lambda t: t.created_at, reverse=True)
             return [t.model_copy(deep=True) for t in tasks[:limit]]
 
+    # Convenience aliases
+    async def create(self, task: Task) -> Task:
+        return await self.save_task(task)
+
+    async def get(self, task_id: str) -> Optional[Task]:
+        return await self.get_task(task_id)
+
+    async def update(self, task: Task) -> Task:
+        return await self.update_task(task)
+
 
 # Global singleton instance for in-memory persistence
 _global_task_store = InMemoryTaskStore()

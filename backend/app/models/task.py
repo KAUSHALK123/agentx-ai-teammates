@@ -47,6 +47,7 @@ class Task(BaseModel):
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     approval_required: bool = False
+    current_approval_id: Optional[str] = None
     events: List[ExecutionEvent] = Field(default_factory=list)
     execution_records: List[Dict[str, Any]] = Field(default_factory=list)
     verification_result: Optional[Dict[str, Any]] = None

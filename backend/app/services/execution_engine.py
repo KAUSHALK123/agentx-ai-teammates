@@ -1,14 +1,18 @@
 from __future__ import annotations
 import logging
 import re
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from app.agents.base import BaseAgent
+from app.models.approval import ApprovalRecord, ApprovalStatus, RiskLevel
 from app.models.plan import PlanStep, StepStatus, StructuredTaskPlan
 from app.models.task import ExecutionEvent, Task, TaskStatus
+from app.services.approval_policy import ApprovalPolicyService, get_approval_policy
+from app.services.approval_store import BaseApprovalStore, get_approval_store
 from app.services.data_service import IDataService, get_data_service
 from app.services.tool_executor import ToolExecutionService, get_tool_executor
 from app.services.verifier import TaskVerifier, VerificationResult
@@ -37,10 +41,14 @@ class TaskExecutionEngine:
         self,
         tool_executor: Optional[ToolExecutionService] = None,
         data_service: Optional[IDataService] = None,
+        approval_policy: Optional[ApprovalPolicyService] = None,
+        approval_store: Optional[BaseApprovalStore] = None,
         max_transient_retries: int = 2,
     ):
         self.tool_executor = tool_executor or get_tool_executor()
         self.data_service = data_service or get_data_service()
+        self.approval_policy = approval_policy or get_approval_policy()
+        self.approval_store = approval_store or get_approval_store()
         self.max_retries = max_transient_retries
 
     async def execute_task(
@@ -49,7 +57,7 @@ class TaskExecutionEngine:
         agent: BaseAgent,
         plan: StructuredTaskPlan,
     ) -> Task:
-        """Execute a structured task plan step-by-step with verification."""
+        """Execute a structured task plan step-by-step with verification and human approval gates."""
         logger.info("Starting execution for task %s with agent %s", task.task_id, agent.agent_id)
         
         # 1. Initialize Task & Context
@@ -73,6 +81,11 @@ class TaskExecutionEngine:
                 step.result_summary = "Skipped due to prior step failure"
                 continue
 
+            # If step was already completed in a prior run (e.g. before approval pause), skip re-executing
+            if step.status == StepStatus.COMPLETED.value:
+                context.completed_steps.append(step.step_id)
+                continue
+
             task.current_step_id = step.step_id
             step.status = StepStatus.RUNNING.value
             step.started_at = datetime.now(timezone.utc)
@@ -81,6 +94,52 @@ class TaskExecutionEngine:
             tool_id = self._determine_tool_for_step(step, agent)
 
             if not tool_id:
+                # Check cognitive action against approval policy if action is high risk (e.g. manual dispatch)
+                decision = self.approval_policy.evaluate(
+                    agent_id=agent.agent_id,
+                    tool_id=None,
+                    action=step.action,
+                    parameters={},
+                )
+                if decision.approval_required:
+                    existing_appr = await self.approval_store.get_approval_by_task_and_step(task.task_id, step.step_id)
+                    if not existing_appr or existing_appr.status != ApprovalStatus.APPROVED:
+                        if not existing_appr:
+                            appr_id = f"appr_{uuid.uuid4().hex[:10]}"
+                            approval_record = ApprovalRecord(
+                                approval_id=appr_id,
+                                task_id=task.task_id,
+                                step_id=step.step_id,
+                                agent_id=agent.agent_id,
+                                action=step.action,
+                                tool_id=None,
+                                risk_level=decision.risk_level,
+                                reason=decision.reason,
+                                proposed_input={},
+                                status=ApprovalStatus.PENDING,
+                            )
+                            await self.approval_store.save_approval(approval_record)
+                        else:
+                            approval_record = existing_appr
+
+                        task.status = TaskStatus.WAITING_FOR_APPROVAL
+                        task.approval_required = True
+                        task.current_approval_id = approval_record.approval_id
+                        step.status = StepStatus.PENDING.value
+                        step.result_summary = f"Waiting for human approval: {decision.reason}"
+                        task.add_event(
+                            stage=TaskStatus.WAITING_FOR_APPROVAL,
+                            action=f"Execution paused for human approval: {step.action}",
+                            summary=decision.reason,
+                        )
+                        task.result = {
+                            "task_id": task.task_id,
+                            "status": TaskStatus.WAITING_FOR_APPROVAL.value,
+                            "summary": f"Execution paused. Action '{step.action}' requires human approval ({decision.risk_level.value} risk).",
+                            "approval": approval_record.model_dump(),
+                        }
+                        return task
+
                 # Synthetic or cognitive action (e.g. analysis, reasoning, direct synthesis)
                 step.status = StepStatus.COMPLETED.value
                 step.completed_at = datetime.now(timezone.utc)
@@ -99,6 +158,82 @@ class TaskExecutionEngine:
             # Prepare parameters
             parameters = self._resolve_step_parameters(step, tool_id, context, task.user_request)
 
+            # Check Human Approval Policy before proceeding
+            decision = self.approval_policy.evaluate(
+                agent_id=agent.agent_id,
+                tool_id=tool_id,
+                action=step.action,
+                parameters=parameters,
+            )
+
+            if decision.approval_required:
+                existing_approval = await self.approval_store.get_approval_by_task_and_step(
+                    task_id=task.task_id,
+                    step_id=step.step_id,
+                )
+                if existing_approval and existing_approval.status == ApprovalStatus.APPROVED:
+                    # Approved by human! Proceed with execution
+                    pass
+                elif existing_approval and existing_approval.status == ApprovalStatus.REJECTED:
+                    err_msg = existing_approval.rejection_reason or "Action rejected by supervisor"
+                    step.status = StepStatus.FAILED.value
+                    step.completed_at = datetime.now(timezone.utc)
+                    step.error = err_msg
+                    context.errors.append(err_msg)
+                    execution_failed = True
+                    failure_reason = err_msg
+                    task.add_event(
+                        stage=TaskStatus.EXECUTING,
+                        action=f"Action '{step.action}' rejected by supervisor",
+                        tool_used=tool_id,
+                        status="FAILED",
+                        summary=err_msg,
+                    )
+                    continue
+                else:
+                    # Create or retrieve pending approval record and pause execution safely
+                    if not existing_approval:
+                        appr_id = f"appr_{uuid.uuid4().hex[:10]}"
+                        approval_record = ApprovalRecord(
+                            approval_id=appr_id,
+                            task_id=task.task_id,
+                            step_id=step.step_id,
+                            agent_id=agent.agent_id,
+                            action=step.action,
+                            tool_id=tool_id,
+                            risk_level=decision.risk_level,
+                            reason=decision.reason,
+                            proposed_input=parameters,
+                            status=ApprovalStatus.PENDING,
+                        )
+                        await self.approval_store.save_approval(approval_record)
+                    else:
+                        approval_record = existing_approval
+
+                    task.status = TaskStatus.WAITING_FOR_APPROVAL
+                    task.approval_required = True
+                    task.current_approval_id = approval_record.approval_id
+                    task.plan = plan
+                    step.status = StepStatus.PENDING.value
+                    step.tool_id = tool_id
+                    step.result_summary = f"Waiting for human approval: {decision.reason}"
+                    task.add_event(
+                        stage=TaskStatus.WAITING_FOR_APPROVAL,
+                        action=f"Execution paused for human approval: {step.action}",
+                        tool_used=tool_id,
+                        summary=decision.reason,
+                    )
+                    task.result = {
+                        "task_id": task.task_id,
+                        "status": TaskStatus.WAITING_FOR_APPROVAL.value,
+                        "summary": f"Execution paused. Action '{step.action}' requires human approval ({decision.risk_level.value} risk).",
+                        "approval": approval_record.model_dump(),
+                    }
+                    from app.services.task_store import get_task_store
+                    await get_task_store().update_task(task)
+                    return task
+
+
             # Check agent permission before execution
             if not self.tool_executor.has_permission(agent.agent_id, tool_id):
                 err_msg = f"Agent '{agent.agent_id}' is not authorized to execute tool '{tool_id}'"
@@ -106,8 +241,10 @@ class TaskExecutionEngine:
                 step.status = StepStatus.FAILED.value
                 step.completed_at = datetime.now(timezone.utc)
                 step.error = err_msg
+                step.result_summary = err_msg
                 context.errors.append(err_msg)
                 execution_failed = True
+
                 failure_reason = err_msg
                 task.add_event(
                     stage=TaskStatus.EXECUTING,
@@ -461,6 +598,152 @@ class TaskExecutionEngine:
                     raise exc
 
         return last_result
+
+    async def resume_task_after_approval(
+        self,
+        task: Union[Task, str, None] = None,
+        approval: Optional[ApprovalRecord] = None,
+        agent: Optional[BaseAgent] = None,
+        *,
+        approval_id: Optional[str] = None,
+        resolved_by: Optional[str] = None,
+    ) -> Task:
+        """Resume task execution from the approved step."""
+        appr_id = approval_id
+        if isinstance(task, str):
+            appr_id = task
+            task = None
+
+        if appr_id:
+            appr = await self.approval_store.get_approval(appr_id)
+            if not appr:
+                raise ValueError(f"Approval '{appr_id}' not found")
+            if appr.status != ApprovalStatus.PENDING:
+                raise ValueError(f"Approval '{appr_id}' is already resolved with status: {appr.status.value}")
+            appr.status = ApprovalStatus.APPROVED
+            appr.resolved_at = datetime.now(timezone.utc)
+            appr.resolved_by = resolved_by or "human_operator"
+            await self.approval_store.update_approval(appr)
+            approval = appr
+
+            from app.services.task_store import get_task_store
+            task = await get_task_store().get_task(appr.task_id)
+            if not task:
+                raise ValueError(f"Associated task '{appr.task_id}' not found")
+
+        if not approval:
+            raise ValueError("Approval record must be provided")
+        if not task:
+            raise ValueError("Task must be provided")
+
+        if not agent:
+            from app.agents.router import AgentRouter
+            _router = AgentRouter()
+            agent_id = approval.agent_id or (task.selected_agent.value if task.selected_agent else "support")
+            agent = _router.get_agent(agent_id)
+            if not agent:
+                from app.agents.support_agent import SupportAgent
+                agent = SupportAgent()
+
+        logger.info("Resuming execution for task %s after approval %s", task.task_id, approval.approval_id)
+        task.approval_required = False
+        task.current_approval_id = None
+        task.status = TaskStatus.EXECUTING
+        task.add_event(
+            stage=TaskStatus.EXECUTING,
+            action=f"Resumed execution following approval: {approval.action}",
+            summary=f"Approved by {approval.resolved_by or 'human operator'}",
+        )
+        if task.plan is None and task.user_request:
+            task.plan = await agent.plan(task.user_request, task_id=task.task_id)
+        resumed = await self.execute_task(task, agent, task.plan)
+        from app.services.task_store import get_task_store
+        await get_task_store().update_task(resumed)
+        return resumed
+
+
+    async def stop_task_after_rejection(
+        self,
+        task: Union[Task, str, None] = None,
+        approval: Optional[ApprovalRecord] = None,
+        rejection_reason: Optional[str] = None,
+        *,
+        approval_id: Optional[str] = None,
+        resolved_by: Optional[str] = None,
+    ) -> Task:
+        """Finalize task as failed/stopped following rejection."""
+        appr_id = approval_id
+        if isinstance(task, str):
+            appr_id = task
+            task = None
+
+        if appr_id:
+            appr = await self.approval_store.get_approval(appr_id)
+            if not appr:
+                raise ValueError(f"Approval '{appr_id}' not found")
+            if appr.status != ApprovalStatus.PENDING:
+                raise ValueError(f"Approval '{appr_id}' is already resolved with status: {appr.status.value}")
+            reason = rejection_reason or "Action rejected by human supervisor"
+            appr.status = ApprovalStatus.REJECTED
+            appr.resolved_at = datetime.now(timezone.utc)
+            appr.resolved_by = resolved_by or "human_operator"
+            appr.rejection_reason = reason
+            await self.approval_store.update_approval(appr)
+            approval = appr
+
+            from app.services.task_store import get_task_store
+            task = await get_task_store().get_task(appr.task_id)
+            if not task:
+                raise ValueError(f"Associated task '{appr.task_id}' not found")
+
+        if not approval:
+            raise ValueError("Approval record must be provided")
+        if not task:
+            raise ValueError("Task must be provided")
+
+        reason = rejection_reason or approval.rejection_reason or "Action rejected by human supervisor"
+        task.approval_required = False
+        task.status = TaskStatus.FAILED
+        task.error = reason
+        task.current_approval_id = approval.approval_id
+
+        # Mark rejected step
+        if task.plan and task.plan.steps:
+            found_rejected = False
+            for step in task.plan.steps:
+                if str(step.step_id) == str(approval.step_id):
+                    step.status = StepStatus.FAILED.value
+                    step.error = reason
+                    step.completed_at = datetime.now(timezone.utc)
+                    step.result_summary = f"Rejected: {reason}"
+                    found_rejected = True
+                elif found_rejected:
+                    step.status = StepStatus.SKIPPED.value
+                    step.result_summary = "Skipped due to prior rejection"
+
+        task.add_event(
+            stage=TaskStatus.FAILED,
+            action=f"Task stopped: action '{approval.action}' rejected",
+            summary=reason,
+            status="FAILED",
+        )
+
+        task.result = {
+            "task_id": task.task_id,
+            "status": TaskStatus.FAILED.value,
+            "summary": f"Task stopped: action '{approval.action}' was rejected by human operator.",
+            "rejection_reason": reason,
+            "approval": approval.model_dump(),
+            "verification": {
+                "verified": False,
+                "verification_type": "human_rejection",
+                "summary": reason,
+            },
+        }
+        from app.services.task_store import get_task_store
+        await get_task_store().update_task(task)
+        return task
+
 
 
 _global_execution_engine: Optional[TaskExecutionEngine] = None

@@ -1,6 +1,7 @@
 from .task import Task, TaskStatus, AgentType, ExecutionEvent
 from .plan import AgentCapability, PlanStep, StructuredTaskPlan, TaskPlan
 from .business import Customer, OrderTransaction, Lead, ActivityRecord
+from .approval import RiskLevel, ApprovalStatus, ApprovalRecord
 
 __all__ = [
     "Task",
@@ -15,4 +16,7 @@ __all__ = [
     "OrderTransaction",
     "Lead",
     "ActivityRecord",
+    "RiskLevel",
+    "ApprovalStatus",
+    "ApprovalRecord",
 ]

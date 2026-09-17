@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 from pydantic import BaseModel, Field
 from app.agents.base import BaseAgent
 from app.agents.support_agent import SupportAgent
@@ -33,9 +33,17 @@ class AgentRouter:
             AgentType.OPERATIONS: OperationsAgent(),
         }
 
-    def get_agent(self, agent_type: AgentType) -> BaseAgent:
-        """Fetch agent instance by AgentType."""
-        return self._agents[agent_type]
+    def get_agent(self, agent_type: Union[AgentType, str]) -> Optional[BaseAgent]:
+        """Fetch agent instance by AgentType or string ID."""
+        if isinstance(agent_type, str):
+            agent = self.get_agent_by_id(agent_type)
+            if agent:
+                return agent
+            try:
+                return self._agents.get(AgentType(agent_type.lower()))
+            except (ValueError, KeyError):
+                return None
+        return self._agents.get(agent_type)
 
     def get_agent_by_id(self, agent_id: str) -> Optional[BaseAgent]:
         """Fetch agent instance by string ID."""
@@ -44,6 +52,7 @@ class AgentRouter:
             if agent_type.value == cleaned:
                 return agent
         return None
+
 
     def list_all_agents(self) -> List[BaseAgent]:
         """Return list of all registered teammates."""

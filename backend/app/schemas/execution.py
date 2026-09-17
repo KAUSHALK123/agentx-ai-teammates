@@ -46,6 +46,7 @@ class TaskExecutionDetailResponse(BaseModel):
     steps: List[PlanStep] = Field(default_factory=list)
     execution_records: List[Dict[str, Any]] = Field(default_factory=list)
     verification_status: Optional[Dict[str, Any]] = None
+    approval: Optional[Dict[str, Any]] = None
     final_result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
@@ -55,6 +56,7 @@ class TaskExecuteResponse(BaseModel):
     task_id: str
     status: TaskStatus
     selected_agent: Optional[str] = None
+    approval: Optional[Dict[str, Any]] = None
     final_result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     message: str

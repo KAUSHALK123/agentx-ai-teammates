@@ -141,13 +141,18 @@ class AIPlanner:
                     ),
                     PlanStep(
                         step_id=5,
-                        action="Synthesize customer response and log resolution activity",
+                        action=(
+                            "Send customer response email and log resolution activity"
+                            if any(w in user_request.lower() for w in ["email", "message", "refund", "compensation", "payout", "send"])
+                            else "Synthesize customer response and log resolution activity"
+                        ),
                         type="synthesis",
                         tool_id="create_activity",
                         status="PENDING",
                     ),
                 ],
             )
+
         elif agent_id == "sales":
             return StructuredTaskPlan(
                 task_id=task_id,

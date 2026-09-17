@@ -489,4 +489,57 @@ The `TaskExecutionEngine` orchestrates each step:
   - `lookup_lead` → qualification analysis → `update_lead` → secondary verification → `create_activity` → `COMPLETED`
 - **Operations Flow**: `"Check today's business data and identify anything requiring attention."`
   - `get_business_data` → analysis → `verify_record` → discrepancy identification → `ESCALATED`
+
+---
+
+## Phase 6 — Human-in-the-Loop Approval
+
+Phase 6 integrates human oversight into the execution engine. Low-risk operations run autonomously, while high-risk, externally visible, financial, or destructive actions pause execution and require explicit human review.
+
+### 1. Risk Classification & Approval Policy
+
+- **`LOW_RISK` (Autonomous Execution)**:
+  - Reading/searching data (`lookup_customer`, `lookup_order`, `lookup_transaction`, `lookup_lead`, `get_business_data`)
+  - Internal calculations, reporting, and non-sensitive activity logging
+- **`HIGH_RISK` (Requires Human Approval)**:
+  - External communication (sending emails, messages, customer replies)
+  - Financial transactions, refunds, compensations, discounts, chargebacks
+  - Data deletions or cancellations (cancelling orders, purging records)
+
+The `ApprovalPolicyService` provides a deterministic gate before any write/sensitive step executes:
+
+```text
+Execution Engine
+      ↓
+Approval Policy
+      ↓
+Approval Required?
+   /          \
+ NO            YES
+ ↓              ↓
+Execute     WAITING_FOR_APPROVAL
+                ↓
+          Human Decision
+             /       \
+        APPROVE      REJECT
+           ↓           ↓
+       Execute       Stop
+           ↓
+       Verify
+```
+
+### 2. Approval Endpoints
+
+- **`GET /approvals`**: List pending approval requests.
+- **`GET /approvals/{approval_id}`**: Retrieve full details of an approval record.
+- **`POST /approvals/{approval_id}/approve`**: Approve the proposed action; immediately resumes execution from the paused step and performs verification.
+- **`POST /approvals/{approval_id}/reject`**: Reject the proposed action with an optional reason (`{"reason": "..."}`); marks the step and task `FAILED` without running the tool.
+
+### 3. Security Guarantees
+
+- **No Self-Approval**: The LLM cannot approve its own actions or bypass policy decisions.
+- **Strict Action Binding**: The `ApprovalRecord` captures `(task_id, step_id, tool_id, proposed_input)` ensuring approved actions cannot mutate into different actions.
+- **Duplicate Prevention**: Re-resolving an already approved or rejected record returns `400 Bad Request`.
+- **Tool Permission Enforcement**: Even after human approval, executing an unauthorized tool is strictly blocked by the agent permission matrix.
+
 
