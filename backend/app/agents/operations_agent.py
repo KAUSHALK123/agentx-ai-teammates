@@ -63,7 +63,11 @@ class OperationsAgent(BaseAgent):
         "accuracy, anomaly detection, and providing structured operational execution plans."
     )
 
-    available_tools: List[str] = ["inventory_status"]
+    available_tools: List[str] = [
+        "get_business_data",
+        "verify_record",
+        "create_activity",
+    ]
 
     def __init__(self, planner: Optional[AIPlanner] = None):
         self.planner = planner or AIPlanner()

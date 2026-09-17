@@ -34,21 +34,11 @@ class BaseAgent(ABC):
         }
 
     async def execute_tool(self, tool_name: str, **kwargs: Any) -> ToolResult:
-        """Safely invoke an authorized tool through the tool layer."""
-        if tool_name not in self.available_tools:
-            return ToolResult(
-                success=False,
-                message=f"Tool '{tool_name}' is not authorized for teammate '{self.name}'",
-                error="Unauthorized tool access",
-            )
-        
-        from app.tools.mock_tools import get_tool_by_name
-        tool = get_tool_by_name(tool_name)
-        if not tool:
-            return ToolResult(
-                success=False,
-                message=f"Tool '{tool_name}' not found in registry",
-                error="Missing tool implementation",
-            )
-
-        return await tool.execute(**kwargs)
+        """Safely invoke an authorized tool through the tool execution service."""
+        from app.services.tool_executor import get_tool_executor
+        executor = get_tool_executor()
+        return await executor.execute_tool(
+            tool_id=tool_name,
+            agent_id=self.agent_id,
+            parameters=kwargs,
+        )

@@ -58,7 +58,12 @@ class SalesAgent(BaseAgent):
         "commercial action plans."
     )
 
-    available_tools: List[str] = ["lead_qualification"]
+    available_tools: List[str] = [
+        "lookup_customer",
+        "lookup_lead",
+        "update_lead",
+        "create_activity",
+    ]
 
     def __init__(self, planner: Optional[AIPlanner] = None):
         self.planner = planner or AIPlanner()

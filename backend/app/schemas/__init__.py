@@ -9,6 +9,11 @@ from .agent import (
     TaskPlanRequest,
     TaskPlanResponse,
 )
+from .tool import (
+    ToolMetadataResponse,
+    ToolExecutionRequest,
+    ToolExecutionResponse,
+)
 
 __all__ = [
     "TaskCreateRequest",
@@ -18,4 +23,7 @@ __all__ = [
     "AgentResponse",
     "TaskPlanRequest",
     "TaskPlanResponse",
+    "ToolMetadataResponse",
+    "ToolExecutionRequest",
+    "ToolExecutionResponse",
 ]

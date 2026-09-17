@@ -47,8 +47,6 @@ Task Result (COMPLETED / ESCALATED / FAILED)
 ## Repository Structure
 
 ```text
-agentx-ai-teammates/
-│
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py
@@ -58,7 +56,9 @@ agentx-ai-teammates/
 │   │   ├── api/
 │   │   │   └── v1/
 │   │   │       ├── health.py           # Health check endpoint
-│   │   │       └── tasks.py            # Task creation & status endpoints
+│   │   │       ├── tasks.py            # Task creation & status endpoints
+│   │   │       ├── agents.py           # AI teammate inspection & routing
+│   │   │       └── tools.py            # Tool discovery and execution endpoints
 │   │   ├── agents/
 │   │   │   ├── base.py                 # BaseAgent & TaskPlan abstractions
 │   │   │   ├── support_agent.py        # Customer Support AI teammate
@@ -68,20 +68,28 @@ agentx-ai-teammates/
 │   │   ├── core/
 │   │   │   └── llm.py                  # LLM provider abstraction (Gemini + fallback)
 │   │   ├── models/
-│   │   │   └── task.py                 # Task, TaskStatus, ExecutionEvent domain models
+│   │   │   ├── task.py                 # Task, TaskStatus, ExecutionEvent domain models
+│   │   │   └── business.py             # Customer, Order, Lead, Activity business models
 │   │   ├── schemas/
-│   │   │   └── task.py                 # Request and response schemas
+│   │   │   ├── task.py                 # Request and response schemas for tasks
+│   │   │   └── tool.py                 # Tool metadata & execution request/response schemas
 │   │   ├── services/
-│   │   │   ├── external_services.py    # Simulated CRM, ERP, and Helpdesk APIs
+│   │   │   ├── external_services.py    # Simulated legacy external APIs
+│   │   │   ├── data_service.py         # Business data service abstraction & demo repo
+│   │   │   ├── tool_executor.py        # Tool execution service, permissions, & audit logs
 │   │   │   ├── task_store.py           # In-memory repository (Supabase-ready)
 │   │   │   ├── verifier.py             # Verification & escalation layer
 │   │   │   └── orchestrator.py         # End-to-end task lifecycle orchestrator
 │   │   ├── tools/
 │   │   │   ├── base.py                 # BaseTool & ToolResult abstractions
-│   │   │   └── mock_tools.py           # Ticket lookup, lead qualification, inventory tools
+│   │   │   ├── registry.py             # Central ToolRegistry & provider interfaces
+│   │   │   ├── implementations.py      # Working business tools (lookup, update, activity)
+│   │   │   └── mock_tools.py           # Legacy mock tools
 │   │   └── utils/
 │   ├── tests/
-│   │   └── test_api.py                 # Health, routing, tool, and lifecycle tests
+│   │   ├── test_api.py                 # Health, routing, tool, and lifecycle tests
+│   │   ├── test_agents.py              # AI Teammates, planning, and router tests
+│   │   └── test_tools.py               # Tool registry, permissions, execution, and API tests
 │   ├── requirements.txt
 │   └── .env.example
 │
@@ -339,3 +347,81 @@ pytest tests -v
   ```
 - **Ambiguous Request Handling**:
   If the input lacks sufficient business clarity (e.g., `"asdf"`), the endpoint returns `is_ambiguous = true` with a polite `clarification_prompt` rather than mistakenly routing to the wrong teammate.
+
+---
+
+## Phase 4 — Tool & Data Layer
+
+AgentX enforces strict sandboxing: **Agents never directly modify databases or external systems**. Every tool action traverses:
+```text
+Agent → Tool Execution Service → Permission Check → Tool → Data Service → Database / External APIs
+```
+
+### 1. Tool Registry & Read/Write Classification
+
+All tools extend `BaseTool` with typed input and output schemas and explicit read/write classifications:
+
+| Tool ID | Name | Category | Classification | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `lookup_customer` | Customer Lookup | `support` | **READ** | Find customer accounts by ID, email, phone, or name. |
+| `lookup_order` | Order Lookup | `support` | **READ** | Retrieve order status and item details by order or customer ID. |
+| `lookup_transaction` | Transaction Lookup | `support` | **READ** | Look up payment transactions, gateway refs, and settlement statuses. |
+| `lookup_lead` | Lead Lookup | `sales` | **READ** | Search sales leads by lead ID, company, or contact email. |
+| `update_lead` | Lead Update | `sales` | **WRITE** | Update CRM lead status, notes, or score. |
+| `get_business_data` | Business Data Retrieval | `operations` | **READ** | Fetch business performance metrics, inventory, or operational KPIs. |
+| `verify_record` | Record Verification | `operations` | **READ** | Cross-verify records across system layers (ledger vs gateway vs inventory). |
+| `create_activity` | Activity Logger | `general` | **WRITE** | Create an audit activity log entry for a task or business event. |
+
+### 2. Agent Permission Matrix
+
+Agents are strictly restricted to their authorized toolset:
+
+- **Customer Support Teammate (`support`)**:
+  - `lookup_customer`, `lookup_order`, `lookup_transaction`, `create_activity`
+- **Sales Teammate (`sales`)**:
+  - `lookup_customer`, `lookup_lead`, `update_lead`, `create_activity`
+- **Operations Teammate (`operations`)**:
+  - `get_business_data`, `verify_record`, `create_activity`
+
+Any attempt by an agent to execute an unauthorized tool raises `403 Forbidden` and is permanently logged in the audit trail.
+
+### 3. Tool Endpoints
+
+#### List Available Tools
+- **`GET /tools`** (or `GET /tools?category=support`)
+- Returns registered tools with schemas, categories, and `is_write` classifications.
+
+#### Inspect Tool Metadata
+- **`GET /tools/{tool_id}`**
+- Returns schema and metadata for a specific tool.
+
+#### Controlled Tool Execution
+- **`POST /tools/{tool_id}/execute`**
+- Manually executes a registered tool under the identity and permissions of the specified agent.
+- **Request**:
+  ```json
+  {
+    "agent_id": "support",
+    "parameters": {
+      "customer_id": "CUST-001"
+    },
+    "task_id": "optional_task_id"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "tool_id": "lookup_customer",
+    "agent_id": "support",
+    "data": {
+      "customer_id": "CUST-001",
+      "name": "Alice Sharma",
+      "email": "alice.sharma@example.com",
+      "phone": "+91-9876543210",
+      "status": "active"
+    },
+    "error": null,
+    "message": "Found customer Alice Sharma (CUST-001)"
+  }
+  ```

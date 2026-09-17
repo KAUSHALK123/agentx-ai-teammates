@@ -2,10 +2,12 @@ from fastapi import APIRouter
 from app.api.v1.health import router as health_router
 from app.api.v1.tasks import router as tasks_router
 from app.api.v1.agents import router as agents_router
+from app.api.v1.tools import router as tools_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(health_router, tags=["Health"])
 api_v1_router.include_router(tasks_router, prefix="/tasks", tags=["Tasks"])
 api_v1_router.include_router(agents_router, prefix="/agents", tags=["Agents"])
+api_v1_router.include_router(tools_router, prefix="/tools", tags=["Tools"])
 
 __all__ = ["api_v1_router"]

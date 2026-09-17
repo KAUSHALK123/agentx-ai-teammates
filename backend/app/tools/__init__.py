@@ -1,16 +1,29 @@
 from .base import BaseTool, ToolResult
-from .mock_tools import (
-    TicketLookupTool,
-    LeadQualificationTool,
-    InventoryStatusTool,
-    get_tool_by_name,
+from .registry import ToolRegistry, get_tool_registry
+from .implementations import (
+    LookupCustomerTool,
+    LookupOrderTool,
+    LookupTransactionTool,
+    LookupLeadTool,
+    UpdateLeadTool,
+    GetBusinessDataTool,
+    VerifyRecordTool,
+    CreateActivityTool,
+    initialize_default_tools,
 )
 
 __all__ = [
     "BaseTool",
     "ToolResult",
-    "TicketLookupTool",
-    "LeadQualificationTool",
-    "InventoryStatusTool",
-    "get_tool_by_name",
+    "ToolRegistry",
+    "get_tool_registry",
+    "LookupCustomerTool",
+    "LookupOrderTool",
+    "LookupTransactionTool",
+    "LookupLeadTool",
+    "UpdateLeadTool",
+    "GetBusinessDataTool",
+    "VerifyRecordTool",
+    "CreateActivityTool",
+    "initialize_default_tools",
 ]

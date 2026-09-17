@@ -63,7 +63,12 @@ class SupportAgent(BaseAgent):
         "and produce structured, actionable resolution plans without conversational fluff."
     )
 
-    available_tools: List[str] = ["ticket_lookup"]
+    available_tools: List[str] = [
+        "lookup_customer",
+        "lookup_order",
+        "lookup_transaction",
+        "create_activity",
+    ]
 
     def __init__(self, planner: Optional[AIPlanner] = None):
         self.planner = planner or AIPlanner()
