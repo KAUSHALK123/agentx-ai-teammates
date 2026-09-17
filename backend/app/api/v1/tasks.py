@@ -1,6 +1,10 @@
+import uuid
 from typing import List
 from fastapi import APIRouter, HTTPException, status
+from app.agents.base import StructuredTaskPlan
+from app.agents.router import AgentRouter
 from app.models.task import Task
+from app.schemas.agent import TaskPlanRequest, TaskPlanResponse
 from app.schemas.task import (
     TaskCreateRequest,
     TaskResponse,
@@ -10,6 +14,7 @@ from app.services.orchestrator import get_orchestrator
 from app.services.task_store import get_task_store
 
 router = APIRouter()
+_router_instance = AgentRouter()
 
 
 @router.post(
@@ -29,6 +34,63 @@ async def create_task(request: TaskCreateRequest) -> TaskResponse:
         task_id=task.task_id,
         selected_agent=task.selected_agent,
         status=task.status,
+    )
+
+
+@router.post(
+    "/plan",
+    response_model=TaskPlanResponse,
+    summary="Generate a structured task plan without execution",
+)
+async def generate_task_plan(request: TaskPlanRequest) -> TaskPlanResponse:
+    """Understand a business request, select the right teammate, and return a structured execution plan."""
+    req_clean = request.user_request.strip()
+    if not req_clean:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Business request cannot be empty.",
+        )
+
+    # 1. Route the request
+    route_result = await _router_instance.determine_route(
+        user_request=req_clean,
+        explicit_agent=request.selected_agent,
+    )
+
+    task_id = f"plan_{uuid.uuid4().hex[:12]}"
+
+    # Handle ambiguous requests
+    if route_result.is_ambiguous or not route_result.selected_agent:
+        return TaskPlanResponse(
+            task_id=task_id,
+            selected_agent="unassigned",
+            task_category=route_result.task_category,
+            confidence=route_result.confidence,
+            explanation=route_result.explanation,
+            is_ambiguous=True,
+            clarification_prompt=route_result.clarification_prompt,
+            plan=StructuredTaskPlan(
+                task_id=task_id,
+                agent="unassigned",
+                objective="Awaiting user clarification to assign specialized teammate",
+                steps=[],
+            ),
+        )
+
+    # 2. Get the assigned teammate
+    agent = _router_instance.get_agent(route_result.selected_agent)
+
+    # 3. Generate structured plan
+    plan = await agent.plan(user_request=req_clean, task_id=task_id)
+
+    return TaskPlanResponse(
+        task_id=task_id,
+        selected_agent=agent.agent_id,
+        task_category=route_result.task_category,
+        confidence=route_result.confidence,
+        explanation=route_result.explanation,
+        is_ambiguous=False,
+        plan=plan,
     )
 
 

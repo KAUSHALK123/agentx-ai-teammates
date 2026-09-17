@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.health import router as health_router
 from app.api.v1.tasks import router as tasks_router
+from app.api.v1.agents import router as agents_router
 from app.api.v1 import api_v1_router
 from app.config.settings import get_settings
 
@@ -28,7 +29,7 @@ settings = get_settings()
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="Autonomous AI Teammates for Business — Phase 1 & 2 Core Backend",
+    description="Autonomous AI Teammates for Business — AI Teammate System",
     lifespan=lifespan,
 )
 
@@ -44,6 +45,7 @@ app.add_middleware(
 # Mount direct endpoints for root contract
 app.include_router(health_router, tags=["Health"])
 app.include_router(tasks_router, prefix="/tasks", tags=["Tasks"])
+app.include_router(agents_router, prefix="/agents", tags=["Agents"])
 
 # Also mount under /api/v1 prefix
 app.include_router(api_v1_router, prefix="/api/v1")
@@ -59,6 +61,8 @@ async def root():
         "docs_url": "/docs",
         "health_url": "/health",
         "tasks_url": "/tasks",
+        "agents_url": "/agents",
+        "plan_url": "/tasks/plan",
     }
 
 
