@@ -1,6 +1,7 @@
+"""AgentX services package."""
 from .task_store import BaseTaskStore, InMemoryTaskStore, get_task_store
 from .verifier import TaskVerifier, VerificationResult
-from .orchestrator import TaskOrchestrator, get_orchestrator
+from .planner import AIPlanner
 
 __all__ = [
     "BaseTaskStore",
@@ -8,6 +9,5 @@ __all__ = [
     "get_task_store",
     "TaskVerifier",
     "VerificationResult",
-    "TaskOrchestrator",
-    "get_orchestrator",
+    "AIPlanner",
 ]

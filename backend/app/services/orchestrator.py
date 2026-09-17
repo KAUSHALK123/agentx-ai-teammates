@@ -65,26 +65,28 @@ class TaskOrchestrator:
             )
 
             # Stage 2: Task Planning
-            plan = await agent.plan(task.user_request)
+            plan = await agent.plan(task.user_request, task_id=task.task_id)
+            plan_summary = getattr(plan, "plan_summary", None) or plan.objective
             task.add_event(
                 stage=TaskStatus.PLANNING,
                 action="Formulated task execution plan",
-                summary=plan.plan_summary,
+                summary=plan_summary,
             )
 
             # Stage 3: Tool Execution
             task.status = TaskStatus.EXECUTING
             tool_output = None
-            if plan.primary_tool:
+            primary_tool = getattr(plan, "primary_tool", None) or (agent.available_tools[0] if agent.available_tools else None)
+            if primary_tool:
                 task.add_event(
                     stage=TaskStatus.EXECUTING,
-                    action=f"Executing tool '{plan.primary_tool}'",
-                    tool_used=plan.primary_tool,
+                    action=f"Executing tool '{primary_tool}'",
+                    tool_used=primary_tool,
                 )
                 
                 # Execute tool using parameters derived from request
                 tool_result = await agent.execute_tool(
-                    plan.primary_tool,
+                    primary_tool,
                     query=task.user_request,
                     inquiry=task.user_request,
                     item=task.user_request,
@@ -93,8 +95,8 @@ class TaskOrchestrator:
                 
                 task.add_event(
                     stage=TaskStatus.EXECUTING,
-                    action=f"Tool '{plan.primary_tool}' execution finished",
-                    tool_used=plan.primary_tool,
+                    action=f"Tool '{primary_tool}' execution finished",
+                    tool_used=primary_tool,
                     status="SUCCESS" if tool_result.success else "FAILED",
                     summary=tool_result.message,
                 )

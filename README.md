@@ -255,3 +255,87 @@ pytest tests -v
 ### 4. List Tasks
 - **`GET /tasks?limit=50`**
 - Returns a list of recently created tasks and statuses.
+
+### 5. List AI Teammates
+- **`GET /agents`**
+- Returns all specialized AI teammates (Support, Sales, Operations) along with their machine-readable capabilities, roles, and assigned tools.
+- **Response (200 OK)**:
+  ```json
+  [
+    {
+      "agent_id": "support",
+      "name": "Support Teammate",
+      "role": "Customer Resolution & Support Specialist",
+      "description": "Specialized AI teammate for resolving customer complaints...",
+      "responsibilities": ["customer support", "complaints", "order/payment issue investigation", ...],
+      "capabilities": [
+        {"name": "investigate_customer_issue", "description": "...", "category": "investigation"},
+        {"name": "analyze_complaint", "description": "...", "category": "analysis"},
+        {"name": "identify_resolution", "description": "...", "category": "resolution"},
+        {"name": "prepare_response", "description": "...", "category": "communication"},
+        {"name": "escalate_issue", "description": "...", "category": "escalation"}
+      ],
+      "available_tools": ["ticket_lookup"]
+    },
+    ...
+  ]
+  ```
+
+### 6. Inspect AI Teammate
+- **`GET /agents/{agent_id}`**
+- Returns the complete profile and capability specifications for a single teammate (`support`, `sales`, or `operations`). Returns `404 Not Found` if invalid.
+
+### 7. Generate Structured Task Plan
+- **`POST /tasks/plan`**
+- Submits a business request for understanding, automatic or explicit routing, and structured execution plan generation without immediately invoking external tools.
+- **Request Body**:
+  ```json
+  {
+    "user_request": "Customer says their payment was successful but their order wasn't confirmed."
+  }
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "task_id": "plan_7f1c84b12a3d",
+    "selected_agent": "support",
+    "task_category": "support",
+    "confidence": 0.88,
+    "explanation": "Request contains customer support, ticket, or refund resolution terminology.",
+    "is_ambiguous": false,
+    "clarification_prompt": null,
+    "plan": {
+      "task_id": "plan_7f1c84b12a3d",
+      "agent": "support",
+      "objective": "Investigate customer issue and formulate resolution...",
+      "steps": [
+        {
+          "step_id": 1,
+          "action": "Analyze customer issue details and extract account/order tokens",
+          "type": "investigation",
+          "status": "pending"
+        },
+        {
+          "step_id": 2,
+          "action": "Perform ticket and order lookup in customer support system",
+          "type": "tool_action",
+          "status": "pending"
+        },
+        {
+          "step_id": 3,
+          "action": "Verify payment/delivery status and evaluate escalation criteria",
+          "type": "verification",
+          "status": "pending"
+        },
+        {
+          "step_id": 4,
+          "action": "Synthesize customer response and prepare resolution record",
+          "type": "synthesis",
+          "status": "pending"
+        }
+      ]
+    }
+  }
+  ```
+- **Ambiguous Request Handling**:
+  If the input lacks sufficient business clarity (e.g., `"asdf"`), the endpoint returns `is_ambiguous = true` with a polite `clarification_prompt` rather than mistakenly routing to the wrong teammate.

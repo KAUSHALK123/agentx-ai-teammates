@@ -1,31 +1,37 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.models.task import AgentType
+from app.models.plan import AgentCapability, PlanStep, StructuredTaskPlan, TaskPlan
 from app.tools.base import ToolResult
-from app.tools.mock_tools import get_tool_by_name
-
-
-class TaskPlan(BaseModel):
-    """Structured execution plan for an AI teammate."""
-    steps: List[str]
-    primary_tool: Optional[str] = None
-    plan_summary: str
 
 
 class BaseAgent(ABC):
     """Abstract Base Class for all specialized AI teammates."""
 
+    agent_id: str
     agent_type: AgentType
     name: str
     role: str
     description: str
-    available_tools: List[str]
+    responsibilities: List[str] = Field(default_factory=list)
+    capabilities: List[AgentCapability] = Field(default_factory=list)
+    system_instructions: str = ""
+    available_tools: List[str] = Field(default_factory=list)
 
     @abstractmethod
-    async def plan(self, user_request: str) -> TaskPlan:
-        """Analyze request and generate structured task execution plan."""
+    async def plan(self, user_request: str, task_id: Optional[str] = None) -> StructuredTaskPlan:
+        """Analyze business request and generate a structured execution plan."""
         pass
+
+    async def execute(self, action: str, **kwargs: Any) -> Dict[str, Any]:
+        """Execute a planned step or action hook."""
+        return {
+            "status": "completed",
+            "action": action,
+            "agent_id": self.agent_id,
+            "details": kwargs,
+        }
 
     async def execute_tool(self, tool_name: str, **kwargs: Any) -> ToolResult:
         """Safely invoke an authorized tool through the tool layer."""
@@ -36,6 +42,7 @@ class BaseAgent(ABC):
                 error="Unauthorized tool access",
             )
         
+        from app.tools.mock_tools import get_tool_by_name
         tool = get_tool_by_name(tool_name)
         if not tool:
             return ToolResult(
