@@ -424,4 +424,69 @@ Any attempt by an agent to execute an unauthorized tool raises `403 Forbidden` a
     "error": null,
     "message": "Found customer Alice Sharma (CUST-001)"
   }
-  ```
+  ```
+
+---
+
+## Phase 5 — Task Execution & Verification
+
+Phase 5 equips AgentX with the capability to autonomously execute planned multi-step workflows.
+
+### 1. Multi-Step Execution Lifecycle
+
+```text
+UNDERSTAND → DECIDE → PLAN → ACT → VERIFY → COMPLETE
+```
+
+The `TaskExecutionEngine` orchestrates each step:
+1. **Sequential Step Progression**: Steps transition strictly through `PENDING → RUNNING → COMPLETED` (or `FAILED` / `SKIPPED`).
+2. **Context & Variable Propagation**: Entities retrieved in earlier steps (e.g. `customer_id`, `order_id`, `lead_id`) are safely injected into subsequent step inputs via `ExecutionContext`.
+3. **Transient Retry Resilience**: Transient failures are retried up to 2 times, while security, schema, and unauthorized tool rejections fail fast without blind retries.
+4. **Mandatory Write Verification**: Write operations (`update_lead`, `create_activity`) are checked against the actual persistence layer before declaring a task completed.
+5. **Human Escalation**: Heuristics detect operational discrepancies or critical thresholds (e.g. low stock, urgent priority) and transition tasks to `ESCALATED`.
+
+### 2. Execution Endpoints
+
+#### Execute a Planned Task
+- **`POST /tasks/{task_id}/execute`**
+- Executes the planned steps sequentially through the assigned AI teammate and controlled tools.
+- **Response**:
+  ```json
+  {
+    "task_id": "plan_c3fdb8c6966d",
+    "status": "COMPLETED",
+    "selected_agent": "support",
+    "final_result": {
+      "task_id": "plan_c3fdb8c6966d",
+      "status": "COMPLETED",
+      "summary": "Support Teammate successfully resolved request.",
+      "actions_performed": [
+        "Step 1 (Lookup customer profile): Found customer Alice Sharma (CUST-001)",
+        "Step 2 (Retrieve customer order fulfillment): Found 2 orders for customer CUST-001",
+        "Step 3 (Lookup payment transaction): Found transaction TXN-5001 for order ORD-5001",
+        "Step 5 (Log resolution activity): Created activity log act_8f29d10e for task"
+      ],
+      "verification": {
+        "verified": true,
+        "verification_type": "record_match",
+        "summary": "All planned actions executed and verified against data store."
+      }
+    },
+    "error": null,
+    "message": "Task execution completed with status: COMPLETED"
+  }
+  ```
+
+#### Inspect Complete Execution Trace
+- **`GET /tasks/{task_id}/execution`**
+- Returns the complete execution trace for frontend visualization, including step statuses, timestamps, tool invocation records, and verification status.
+
+### 3. Tested Business Flows
+
+- **Support Flow**: `"Investigate customer C001's order."`
+  - `lookup_customer` → `lookup_order` → `lookup_transaction` → `verification` → `COMPLETED`
+- **Sales Flow**: `"Process lead L001 and update the lead status."`
+  - `lookup_lead` → qualification analysis → `update_lead` → secondary verification → `create_activity` → `COMPLETED`
+- **Operations Flow**: `"Check today's business data and identify anything requiring attention."`
+  - `get_business_data` → analysis → `verify_record` → discrepancy identification → `ESCALATED`
+

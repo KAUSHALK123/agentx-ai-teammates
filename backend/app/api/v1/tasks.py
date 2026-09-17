@@ -3,13 +3,18 @@ from typing import List
 from fastapi import APIRouter, HTTPException, status
 from app.agents.base import StructuredTaskPlan
 from app.agents.router import AgentRouter
-from app.models.task import Task
+from app.models.task import AgentType, Task, TaskStatus
 from app.schemas.agent import TaskPlanRequest, TaskPlanResponse
 from app.schemas.task import (
     TaskCreateRequest,
     TaskResponse,
     TaskDetailResponse,
 )
+from app.schemas.execution import (
+    TaskExecuteResponse,
+    TaskExecutionDetailResponse,
+)
+from app.services.execution_engine import get_execution_engine
 from app.services.orchestrator import get_orchestrator
 from app.services.task_store import get_task_store
 
@@ -83,6 +88,22 @@ async def generate_task_plan(request: TaskPlanRequest) -> TaskPlanResponse:
     # 3. Generate structured plan
     plan = await agent.plan(user_request=req_clean, task_id=task_id)
 
+    # Save the planned task so it can be executed via POST /tasks/{task_id}/execute
+    store = get_task_store()
+    agent_type = None
+    for at in AgentType:
+        if at.value == agent.agent_id:
+            agent_type = at
+            break
+    planned_task = Task(
+        task_id=task_id,
+        user_request=req_clean,
+        selected_agent=agent_type,
+        status=TaskStatus.PLANNING,
+        plan=plan,
+    )
+    await store.save_task(planned_task)
+
     return TaskPlanResponse(
         task_id=task_id,
         selected_agent=agent.agent_id,
@@ -91,6 +112,94 @@ async def generate_task_plan(request: TaskPlanRequest) -> TaskPlanResponse:
         explanation=route_result.explanation,
         is_ambiguous=False,
         plan=plan,
+    )
+
+
+@router.post(
+    "/{task_id}/execute",
+    response_model=TaskExecuteResponse,
+    summary="Execute a planned business task",
+)
+async def execute_task(task_id: str) -> TaskExecuteResponse:
+    """Execute the existing task plan step-by-step through controlled tools, retries, and verification."""
+    store = get_task_store()
+    task = await store.get_task(task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task with ID '{task_id}' not found",
+        )
+
+    # Resolve agent
+    agent_id = task.selected_agent.value if task.selected_agent else None
+    if not agent_id:
+        # Route to agent
+        route_result = await _router_instance.determine_route(task.user_request)
+        if not route_result.selected_agent:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unable to determine agent for unassigned task.",
+            )
+        agent_id = route_result.selected_agent
+        for at in AgentType:
+            if at.value == agent_id:
+                task.selected_agent = at
+                break
+
+    agent = _router_instance.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Agent '{agent_id}' not found in registry.",
+        )
+
+    # Ensure plan exists
+    if not task.plan or not task.plan.steps:
+        task.plan = await agent.plan(task.user_request, task_id=task.task_id)
+
+    # Execute plan through TaskExecutionEngine
+    execution_engine = get_execution_engine()
+    executed_task = await execution_engine.execute_task(task, agent, task.plan)
+    await store.update_task(executed_task)
+
+    return TaskExecuteResponse(
+        task_id=executed_task.task_id,
+        status=executed_task.status,
+        selected_agent=executed_task.selected_agent.value if executed_task.selected_agent else None,
+        final_result=executed_task.result,
+        error=executed_task.error,
+        message=f"Task execution completed with status: {executed_task.status.value}",
+    )
+
+
+@router.get(
+    "/{task_id}/execution",
+    response_model=TaskExecutionDetailResponse,
+    summary="Retrieve detailed execution trace, step breakdown, and audit records",
+)
+async def get_task_execution(task_id: str) -> TaskExecutionDetailResponse:
+    """Return task execution details including step statuses, tool logs, verification, and final result."""
+    store = get_task_store()
+    task = await store.get_task(task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task with ID '{task_id}' not found",
+        )
+
+    steps = task.plan.steps if task.plan else []
+    selected_agent_str = task.selected_agent.value if task.selected_agent else None
+
+    return TaskExecutionDetailResponse(
+        task_id=task.task_id,
+        task_status=task.status,
+        selected_agent=selected_agent_str,
+        current_step=task.current_step_id,
+        steps=steps,
+        execution_records=task.execution_records,
+        verification_status=task.verification_result,
+        final_result=task.result,
+        error=task.error,
     )
 
 

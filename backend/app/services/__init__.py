@@ -4,6 +4,7 @@ from .verifier import TaskVerifier, VerificationResult
 from .planner import AIPlanner
 from .data_service import IDataService, DemoDataService, get_data_service
 from .tool_executor import ToolExecutionService, ToolExecutionRecord, get_tool_executor
+from .execution_engine import TaskExecutionEngine, ExecutionContext, get_execution_engine
 
 __all__ = [
     "BaseTaskStore",
@@ -18,4 +19,7 @@ __all__ = [
     "ToolExecutionService",
     "ToolExecutionRecord",
     "get_tool_executor",
+    "TaskExecutionEngine",
+    "ExecutionContext",
+    "get_execution_engine",
 ]

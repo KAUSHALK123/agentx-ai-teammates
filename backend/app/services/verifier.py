@@ -1,13 +1,15 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 from app.models.task import Task, TaskStatus
+from app.services.data_service import IDataService, get_data_service
 
 
 class VerificationResult(BaseModel):
     """Result of verifying task execution outcomes against business standards."""
     verified: bool
-    recommended_status: TaskStatus
+    verification_type: str = "record_match"
     summary: str
+    recommended_status: TaskStatus = TaskStatus.COMPLETED
     requires_human_review: bool = False
     details: Optional[Dict[str, Any]] = None
 
@@ -16,45 +18,140 @@ class TaskVerifier:
     """Verifies that teammate execution produced valid, complete, and reliable outcomes."""
 
     @classmethod
-    async def verify(cls, task: Task, action_result: Optional[Dict[str, Any]] = None) -> VerificationResult:
-        """Evaluate task results and determine final lifecycle status."""
-        if not action_result:
+    async def verify_task_execution(
+        cls,
+        task: Task,
+        completed_tool_results: List[Dict[str, Any]],
+        data_service: Optional[IDataService] = None,
+    ) -> VerificationResult:
+        """Thoroughly verify multi-step task outcomes against actual data store state."""
+        ds = data_service or get_data_service()
+
+        if not completed_tool_results:
             return VerificationResult(
                 verified=False,
+                verification_type="execution_check",
                 recommended_status=TaskStatus.FAILED,
-                summary="Execution produced no verifiable output.",
+                summary="Execution produced no verifiable tool outputs.",
             )
 
-        # Check for explicit failure flag from tool
-        if not action_result.get("success", False):
-            error_msg = action_result.get("error") or action_result.get("message", "Tool execution failed")
-            return VerificationResult(
-                verified=False,
-                recommended_status=TaskStatus.FAILED,
-                summary=f"Action failed validation: {error_msg}",
-            )
-
-        data = action_result.get("data") or {}
-
-        # Heuristic check for conditions requiring human escalation
-        # e.g., Low stock warnings, critical priority tickets, or high-value enterprise custom requests
-        if isinstance(data, dict):
-            location_status = str(data.get("location", "")).lower()
-            priority = str(data.get("priority", "")).lower()
-            
-            if "low stock" in location_status or priority == "urgent":
+        # Check if any tool reported a hard failure
+        for res in completed_tool_results:
+            if not res.get("success", False):
+                err = res.get("error") or res.get("message", "Unknown tool error")
+                tool_id = res.get("tool_id", "unknown_tool")
                 return VerificationResult(
-                    verified=True,
-                    recommended_status=TaskStatus.ESCALATED,
-                    summary="Action completed successfully, but flagged threshold requires human oversight.",
-                    requires_human_review=True,
-                    details=data,
+                    verified=False,
+                    verification_type="tool_execution",
+                    recommended_status=TaskStatus.FAILED,
+                    summary=f"Action '{tool_id}' failed execution: {err}",
+                    details={"failed_tool": tool_id, "error": err},
                 )
+
+        # 1. Verify Write Operations (Mandatory Real Confirmation)
+        for res in completed_tool_results:
+            tool_id = res.get("tool_id")
+            data = res.get("data") or {}
+
+            # Verification for update_lead
+            if tool_id == "update_lead":
+                lead_id = data.get("lead_id")
+                expected_status = data.get("status")
+                if not lead_id:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="record_match",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="Lead update verification failed: missing lead_id in result.",
+                    )
+                persisted_lead = await ds.get_lead(lead_id)
+                if not persisted_lead:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="record_match",
+                        recommended_status=TaskStatus.FAILED,
+                        summary=f"Lead update verification failed: Lead '{lead_id}' not found in database.",
+                    )
+                if expected_status and persisted_lead.status != expected_status:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="record_match",
+                        recommended_status=TaskStatus.FAILED,
+                        summary=f"Lead status verification failed: expected '{expected_status}', found '{persisted_lead.status}'",
+                        details={"expected": expected_status, "actual": persisted_lead.status},
+                    )
+
+            # Verification for create_activity
+            elif tool_id == "create_activity":
+                activity_id = data.get("activity_id")
+                if not activity_id:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="existence_check",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="Activity creation verification failed: missing activity_id.",
+                    )
+                persisted_act = await ds.get_activity(activity_id)
+                if not persisted_act:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="existence_check",
+                        recommended_status=TaskStatus.FAILED,
+                        summary=f"Activity creation verification failed: Activity '{activity_id}' was not persisted.",
+                    )
+
+        # 2. Check for Operational / Customer Escalation Flags
+        for res in completed_tool_results:
+            data = res.get("data") or {}
+            if isinstance(data, dict):
+                location_status = str(data.get("location", "")).lower()
+                priority = str(data.get("priority", "")).lower()
+                status_str = str(data.get("status", "")).lower()
+                
+                # Discrepancies in verification tool
+                discrepancies = data.get("discrepancies") or []
+                if discrepancies:
+                    return VerificationResult(
+                        verified=True,
+                        verification_type="record_match",
+                        recommended_status=TaskStatus.ESCALATED,
+                        summary=f"Discrepancies identified during operational audit: {', '.join(discrepancies)}",
+                        requires_human_review=True,
+                        details=data,
+                    )
+
+                if "low stock" in location_status or priority == "urgent":
+                    return VerificationResult(
+                        verified=True,
+                        verification_type="heuristic_check",
+                        recommended_status=TaskStatus.ESCALATED,
+                        summary="Action completed successfully, but flagged threshold requires human oversight.",
+                        requires_human_review=True,
+                        details=data,
+                    )
 
         return VerificationResult(
             verified=True,
+            verification_type="record_match",
             recommended_status=TaskStatus.COMPLETED,
-            summary="Action verified: outputs meet quality and data integrity constraints.",
+            summary="All planned actions executed and verified against data store.",
             requires_human_review=False,
-            details=data,
+            details={"actions_verified": len(completed_tool_results)},
         )
+
+    @classmethod
+    async def verify(cls, task: Task, action_result: Optional[Dict[str, Any]] = None) -> VerificationResult:
+        """Backward-compatible wrapper for single-action verification."""
+        if not action_result:
+            return VerificationResult(
+                verified=False,
+                verification_type="execution_check",
+                recommended_status=TaskStatus.FAILED,
+                summary="Execution produced no verifiable output.",
+            )
+        return await cls.verify_task_execution(task, [action_result])
+
+
+# Alias for clarity
+VerificationEngine = TaskVerifier
+

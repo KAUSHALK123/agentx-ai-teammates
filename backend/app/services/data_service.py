@@ -71,6 +71,14 @@ class IDataService(ABC):
     ) -> ActivityRecord:
         pass
 
+    @abstractmethod
+    async def get_activity(self, activity_id: str) -> Optional[ActivityRecord]:
+        pass
+
+    @abstractmethod
+    async def get_activities_for_task(self, task_id: str) -> List[ActivityRecord]:
+        pass
+
 
 class DemoDataService(IDataService):
     """Realistic in-memory business data service for development and testing."""
@@ -144,6 +152,24 @@ class DemoDataService(IDataService):
             ),
             "LEAD-002": Lead(
                 lead_id="LEAD-002",
+                name="Priya Patel",
+                email="priya@waynecorp.in",
+                company="Wayne India",
+                status="contacted",
+                source="referral",
+                notes="Interested in Q3 logistics automation pilot",
+            ),
+            "LEAD-101": Lead(
+                lead_id="LEAD-101",
+                name="Rajesh Khanna",
+                email="rajesh@cyberdyne.co.in",
+                company="Cyberdyne Tech",
+                status="new",
+                source="inbound_enterprise",
+                notes="Inquired about 500 seat enterprise expansion",
+            ),
+            "LEAD-102": Lead(
+                lead_id="LEAD-102",
                 name="Priya Patel",
                 email="priya@waynecorp.in",
                 company="Wayne India",
@@ -318,6 +344,19 @@ class DemoDataService(IDataService):
         async with self._lock:
             self._activities[activity_id] = record
             return record.model_copy()
+
+    async def get_activity(self, activity_id: str) -> Optional[ActivityRecord]:
+        async with self._lock:
+            act = self._activities.get(activity_id)
+            return act.model_copy() if act else None
+
+    async def get_activities_for_task(self, task_id: str) -> List[ActivityRecord]:
+        async with self._lock:
+            return [
+                act.model_copy()
+                for act in self._activities.values()
+                if act.task_id == task_id
+            ]
 
 
 # Global singleton instance

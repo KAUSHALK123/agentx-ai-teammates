@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
+from app.models.plan import StructuredTaskPlan
 
 
 class TaskStatus(str, Enum):
@@ -41,10 +42,15 @@ class Task(BaseModel):
     status: TaskStatus = TaskStatus.CREATED
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    plan: Optional[StructuredTaskPlan] = None
+    current_step_id: Optional[Union[int, str]] = None
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     approval_required: bool = False
     events: List[ExecutionEvent] = Field(default_factory=list)
+    execution_records: List[Dict[str, Any]] = Field(default_factory=list)
+    verification_result: Optional[Dict[str, Any]] = None
+
 
     def add_event(
         self,

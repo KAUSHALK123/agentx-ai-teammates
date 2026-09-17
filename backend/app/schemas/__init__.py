@@ -14,6 +14,13 @@ from .tool import (
     ToolExecutionRequest,
     ToolExecutionResponse,
 )
+from .execution import (
+    TaskExecutionRecordSchema,
+    VerificationSummary,
+    TaskFinalResult,
+    TaskExecutionDetailResponse,
+    TaskExecuteResponse,
+)
 
 __all__ = [
     "TaskCreateRequest",
@@ -26,4 +33,9 @@ __all__ = [
     "ToolMetadataResponse",
     "ToolExecutionRequest",
     "ToolExecutionResponse",
+    "TaskExecutionRecordSchema",
+    "VerificationSummary",
+    "TaskFinalResult",
+    "TaskExecutionDetailResponse",
+    "TaskExecuteResponse",
 ]

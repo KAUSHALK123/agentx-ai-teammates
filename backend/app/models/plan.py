@@ -1,5 +1,16 @@
-from typing import Any, List, Optional
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
+
+
+class StepStatus(str, Enum):
+    """Lifecycle states of an individual plan step."""
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
 
 
 class AgentCapability(BaseModel):
@@ -11,10 +22,16 @@ class AgentCapability(BaseModel):
 
 class PlanStep(BaseModel):
     """Actionable step within a structured task plan."""
-    step_id: int
+    step_id: Union[int, str]
     action: str
     type: str = Field(description="Step type: e.g. investigation, tool_action, verification, synthesis")
-    status: str = "pending"
+    tool_id: Optional[str] = None
+    input: Optional[Dict[str, Any]] = None
+    status: str = StepStatus.PENDING.value
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    result_summary: Optional[str] = None
+    error: Optional[str] = None
 
 
 class StructuredTaskPlan(BaseModel):
@@ -33,3 +50,4 @@ class StructuredTaskPlan(BaseModel):
 
 # Backward compatibility alias
 TaskPlan = StructuredTaskPlan
+
