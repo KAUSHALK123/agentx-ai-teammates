@@ -31,9 +31,11 @@ class ApprovalPolicyService:
         "send_email",
         "send_sms",
         "issue_refund",
+        "issue_demo_refund",
         "cancel_order",
         "delete_record",
         "apply_discount",
+        "n8n_send_followup",
     }
 
     def evaluate(

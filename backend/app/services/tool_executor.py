@@ -35,17 +35,23 @@ class ToolExecutionService:
             "lookup_order",
             "lookup_transaction",
             "create_activity",
+            "prepare_customer_response",
+            "issue_demo_refund",
+            "escalate_support_case",
         },
         AgentType.SALES.value: {
             "lookup_customer",
             "lookup_lead",
             "update_lead",
             "create_activity",
+            "n8n_process_lead",
+            "n8n_send_followup",
         },
         AgentType.OPERATIONS.value: {
             "get_business_data",
             "verify_record",
             "create_activity",
+            "n8n_operations_check",
         },
     }
 

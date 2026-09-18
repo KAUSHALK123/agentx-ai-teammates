@@ -1,7 +1,11 @@
+import uuid
 from typing import List, Optional
 from app.agents.base import AgentCapability, BaseAgent, StructuredTaskPlan
+from app.models.plan import PlanStep
+from app.models.support import SupportIntent
 from app.models.task import AgentType
 from app.services.planner import AIPlanner
+from app.services.support_analyzer import SupportAnalyzer
 
 
 class SupportAgent(BaseAgent):
@@ -68,20 +72,246 @@ class SupportAgent(BaseAgent):
         "lookup_order",
         "lookup_transaction",
         "create_activity",
+        "prepare_customer_response",
+        "issue_demo_refund",
+        "escalate_support_case",
     ]
 
     def __init__(self, planner: Optional[AIPlanner] = None):
         self.planner = planner or AIPlanner()
 
     async def plan(self, user_request: str, task_id: Optional[str] = None) -> StructuredTaskPlan:
-        """Formulate a structured execution plan for support inquiries."""
-        capability_names = [c.name for c in self.capabilities]
-        return await self.planner.generate_plan(
-            user_request=user_request,
-            agent_id=self.agent_id,
-            agent_name=self.name,
-            system_instructions=self.system_instructions,
-            capabilities=capability_names,
-            available_tools=self.available_tools,
-            task_id=task_id,
+        """Formulate an adaptive, structured execution plan for support inquiries."""
+        tid = task_id or f"task_{uuid.uuid4().hex[:12]}"
+        
+        # Analyze support intent and entities
+        classification = SupportAnalyzer.classify_intent(user_request)
+        intent = classification.intent
+
+        # Build intent-adapted plan steps
+        if intent == SupportIntent.REFUND_REQUEST:
+            steps = [
+                PlanStep(
+                    step_id=1,
+                    action="Identify customer profile and verify account eligibility",
+                    type="tool_action",
+                    tool_id="lookup_customer",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=2,
+                    action="Inspect transaction status and verify payment details",
+                    type="tool_action",
+                    tool_id="lookup_transaction",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=3,
+                    action="Process refund for failed transaction",
+                    type="tool_action",
+                    tool_id="issue_demo_refund",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=4,
+                    action="Log resolution and update activity record",
+                    type="synthesis",
+                    tool_id="create_activity",
+                    status="PENDING",
+                ),
+
+            ]
+            objective = f"Investigate refund request and process resolution for: {user_request[:60]}"
+
+        elif intent in [SupportIntent.DELAYED_ORDER, SupportIntent.ORDER_ISSUE]:
+            steps = [
+                PlanStep(
+                    step_id=1,
+                    action="Identify customer profile and verify account status",
+                    type="tool_action",
+                    tool_id="lookup_customer",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=2,
+                    action="Retrieve customer order fulfillment and tracking details",
+                    type="tool_action",
+                    tool_id="lookup_order",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=3,
+                    action="Check payment reconciliation and settlement status",
+                    type="tool_action",
+                    tool_id="lookup_transaction",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=4,
+                    action="Prepare customer update and resolution response",
+                    type="tool_action",
+                    tool_id="prepare_customer_response",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=5,
+                    action=(
+                        "Send customer response email and log resolution activity"
+                        if any(w in user_request.lower() for w in ["email", "message", "send", "dispatch"])
+                        else "Log customer support resolution activity"
+                    ),
+                    type="synthesis",
+                    tool_id="create_activity",
+                    status="PENDING",
+                ),
+            ]
+
+            objective = f"Investigate delayed order fulfillment and formulate resolution for: {user_request[:60]}"
+
+        elif intent in [SupportIntent.PAYMENT_ISSUE, SupportIntent.TRANSACTION_ISSUE]:
+            steps = [
+                PlanStep(
+                    step_id=1,
+                    action="Identify customer profile and verify account status",
+                    type="tool_action",
+                    tool_id="lookup_customer",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=2,
+                    action="Retrieve customer order details to investigate payment mismatch",
+                    type="tool_action",
+                    tool_id="lookup_order",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=3,
+                    action="Lookup payment transaction and settlement status",
+                    type="tool_action",
+                    tool_id="lookup_transaction",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=4,
+                    action="Prepare customer explanation and resolution response",
+                    type="tool_action",
+                    tool_id="prepare_customer_response",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=5,
+                    action=(
+                        "Send customer response email and log resolution activity"
+                        if any(w in user_request.lower() for w in ["email", "message", "send", "dispatch"])
+                        else "Log payment mismatch resolution record"
+                    ),
+                    type="synthesis",
+                    tool_id="create_activity",
+                    status="PENDING",
+                ),
+            ]
+            objective = f"Investigate payment mismatch and reconcile transaction for: {user_request[:60]}"
+
+        elif intent == SupportIntent.CUSTOMER_REVIEW:
+            steps = [
+                PlanStep(
+                    step_id=1,
+                    action="Identify customer profile and previous activity",
+                    type="tool_action",
+                    tool_id="lookup_customer",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=2,
+                    action="Analyze review sentiment and synthesize recommended response",
+                    type="tool_action",
+                    tool_id="prepare_customer_response",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=3,
+                    action="Record customer review response strategy in activity log",
+                    type="synthesis",
+                    tool_id="create_activity",
+                    status="PENDING",
+                ),
+            ]
+            objective = f"Analyze customer review sentiment and formulate strategy for: {user_request[:60]}"
+
+        elif intent == SupportIntent.ESCALATION:
+            steps = [
+                PlanStep(
+                    step_id=1,
+                    action="Identify customer profile",
+                    type="tool_action",
+                    tool_id="lookup_customer",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=2,
+                    action="Escalate high-risk or unresolved case to human supervisor",
+                    type="tool_action",
+                    tool_id="escalate_support_case",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=3,
+                    action="Log escalation record in activity history",
+                    type="synthesis",
+                    tool_id="create_activity",
+                    status="PENDING",
+                ),
+            ]
+            objective = f"Escalate support case for: {user_request[:60]}"
+
+        else:
+            steps = [
+                PlanStep(
+                    step_id=1,
+                    action="Identify customer profile and verify account status",
+                    type="tool_action",
+                    tool_id="lookup_customer",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=2,
+                    action="Retrieve customer order fulfillment and tracking details",
+                    type="tool_action",
+                    tool_id="lookup_order",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=3,
+                    action="Lookup payment transaction and settlement status",
+                    type="tool_action",
+                    tool_id="lookup_transaction",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=4,
+                    action="Prepare customer resolution response",
+                    type="tool_action",
+                    tool_id="prepare_customer_response",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=5,
+                    action=(
+                        "Send customer response email and log resolution activity"
+                        if any(w in user_request.lower() for w in ["email", "message", "send", "dispatch"])
+                        else "Log customer support resolution activity"
+                    ),
+                    type="synthesis",
+                    tool_id="create_activity",
+                    status="PENDING",
+                ),
+            ]
+
+            objective = f"Investigate customer issue and formulate resolution for: {user_request[:60]}"
+
+        return StructuredTaskPlan(
+            task_id=tid,
+            agent=self.agent_id,
+            objective=objective,
+            steps=steps,
         )

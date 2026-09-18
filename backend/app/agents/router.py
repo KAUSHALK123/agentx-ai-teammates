@@ -193,7 +193,7 @@ class AgentRouter:
         req_lower = request.lower()
 
         sales_keywords = ["price", "pricing", "discount", "quote", "sales", "demo", "lead", "prospect", "contract", "enterprise"]
-        ops_keywords = ["inventory", "stock", "warehouse", "logistics", "supply", "shipping", "operations", "report", "data", "audit"]
+        ops_keywords = ["inventory", "stock", "warehouse", "logistics", "supply", "shipping", "operations", "operational", "report", "data", "audit", "exception", "exceptions", "business check", "record", "records"]
         support_keywords = ["refund", "ticket", "complaint", "order", "payment", "customer", "issue", "delay", "cancel"]
 
         sales_score = sum(1 for k in sales_keywords if k in req_lower)

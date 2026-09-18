@@ -61,7 +61,9 @@ class SalesAgent(BaseAgent):
     available_tools: List[str] = [
         "lookup_customer",
         "lookup_lead",
+        "n8n_process_lead",
         "update_lead",
+        "n8n_send_followup",
         "create_activity",
     ]
 
@@ -69,7 +71,124 @@ class SalesAgent(BaseAgent):
         self.planner = planner or AIPlanner()
 
     async def plan(self, user_request: str, task_id: Optional[str] = None) -> StructuredTaskPlan:
-        """Formulate a structured execution plan for commercial requests."""
+        """Formulate an adaptive, structured execution plan for commercial requests."""
+        import re
+        import uuid
+        from app.models.plan import PlanStep
+
+        tid = task_id or f"task_{uuid.uuid4().hex[:12]}"
+        req_lower = user_request.lower()
+
+        # Scenario 1: External follow-up dispatch (HIGH-RISK, requires human approval)
+        if re.search(r"\b(send|dispatch|deliver)\b.*\b(follow-?up|email|message|outreach)\b", req_lower):
+            steps = [
+                PlanStep(
+                    step_id=1,
+                    action="Verify sales lead profile and contact parameters",
+                    type="tool_action",
+                    tool_id="lookup_lead",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=2,
+                    action="Send approved follow-up email to lead via n8n integration",
+                    type="tool_action",
+                    tool_id="n8n_send_followup",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=3,
+                    action="Record outbound communication delivery in activity log",
+                    type="synthesis",
+                    tool_id="create_activity",
+                    status="PENDING",
+                ),
+            ]
+            return StructuredTaskPlan(
+                task_id=tid,
+                agent="sales",
+                objective=f"Dispatch approved commercial outreach to prospect: {user_request[:60]}",
+                steps=steps,
+                primary_tool="n8n_send_followup",
+                plan_summary="Dispatch approved follow-up email via n8n integration",
+            )
+
+        # Scenario 2: Lead processing, qualification, and follow-up preparation via n8n workflow
+        if re.search(r"\b(follow-?up|proposal|qualif|n8n|workflow)\b", req_lower):
+            steps = [
+                PlanStep(
+                    step_id=1,
+                    action="Retrieve prospect details and CRM context",
+                    type="tool_action",
+                    tool_id="lookup_lead",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=2,
+                    action="Orchestrate n8n lead qualification workflow and draft proposal",
+                    type="tool_action",
+                    tool_id="n8n_process_lead",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=3,
+                    action="Update CRM lead status with qualification outcome",
+                    type="tool_action",
+                    tool_id="update_lead",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=4,
+                    action="Log commercial activity and queue for follow-up review",
+                    type="synthesis",
+                    tool_id="create_activity",
+                    status="PENDING",
+                ),
+            ]
+            return StructuredTaskPlan(
+                task_id=tid,
+                agent="sales",
+                objective=f"Process commercial lead and formulate tailored proposal: {user_request[:60]}",
+                steps=steps,
+                primary_tool="n8n_process_lead",
+                plan_summary="Process commercial lead, evaluate qualification via n8n, and draft proposal",
+            )
+
+        # Scenario 3: Standard CRM lead update without external orchestration
+        if re.search(r"\b(lead|prospect|status)\b", req_lower):
+            steps = [
+                PlanStep(
+                    step_id=1,
+                    action="Retrieve prospect details",
+                    type="tool_action",
+                    tool_id="lookup_lead",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=2,
+                    action="Update CRM lead status",
+                    type="tool_action",
+                    tool_id="update_lead",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=3,
+                    action="Log CRM activity record",
+                    type="synthesis",
+                    tool_id="create_activity",
+                    status="PENDING",
+                ),
+            ]
+            return StructuredTaskPlan(
+                task_id=tid,
+                agent="sales",
+                objective=f"Update commercial lead record: {user_request[:60]}",
+                steps=steps,
+                primary_tool="update_lead",
+                plan_summary="Update commercial lead record in CRM",
+            )
+
+        # Fallback to general AI Planner for open-ended requests
         capability_names = [c.name for c in self.capabilities]
         return await self.planner.generate_plan(
             user_request=user_request,

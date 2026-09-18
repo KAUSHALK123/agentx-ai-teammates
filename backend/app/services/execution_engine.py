@@ -134,9 +134,15 @@ class TaskExecutionEngine:
                         )
                         task.result = {
                             "task_id": task.task_id,
+                            "agent": agent.agent_id,
                             "status": TaskStatus.WAITING_FOR_APPROVAL.value,
                             "summary": f"Execution paused. Action '{step.action}' requires human approval ({decision.risk_level.value} risk).",
                             "approval": approval_record.model_dump(),
+                            "customer": context.variables.get("customer_id") or "CUST-001",
+                            "issue": context.variables.get("issue_summary") or task.user_request,
+                            "proposed_action": step.action,
+                            "reason": decision.reason,
+                            "risk_level": decision.risk_level.value,
                         }
                         return task
 
@@ -225,9 +231,16 @@ class TaskExecutionEngine:
                     )
                     task.result = {
                         "task_id": task.task_id,
+                        "agent": agent.agent_id,
                         "status": TaskStatus.WAITING_FOR_APPROVAL.value,
                         "summary": f"Execution paused. Action '{step.action}' requires human approval ({decision.risk_level.value} risk).",
                         "approval": approval_record.model_dump(),
+                        "customer": parameters.get("lead_id") or context.variables.get("lead_id") or parameters.get("customer_id") or context.variables.get("customer_id") or "CUST-001",
+                        "issue": context.variables.get("issue_summary") or task.user_request,
+                        "proposed_action": step.action,
+                        "amount": parameters.get("amount") or context.variables.get("amount"),
+                        "reason": decision.reason,
+                        "risk_level": decision.risk_level.value,
                     }
                     from app.services.task_store import get_task_store
                     await get_task_store().update_task(task)
@@ -351,22 +364,50 @@ class TaskExecutionEngine:
             if s.status == StepStatus.COMPLETED.value
         ]
 
-        task.result = {
-            "task_id": task.task_id,
-            "status": final_status.value,
-            "summary": (
-                f"{agent.name} successfully resolved request."
-                if verification.verified
-                else f"Task did not complete successfully: {verification.summary}"
-            ),
-            "actions_performed": actions_performed,
-            "verification": {
-                "verified": verification.verified,
-                "verification_type": verification.verification_type,
-                "summary": verification.summary,
-                "details": verification.details,
-            },
-        }
+        if agent.agent_id == "support":
+            issue_desc = context.variables.get("issue_summary") or plan.objective
+            cust_val = context.variables.get("customer_id") or "CUST-001"
+            resolution_desc = context.variables.get("proposed_resolution") or (
+                "Order status confirmed and investigated" if "order" in str(issue_desc).lower()
+                else "Issue investigated and resolution determined"
+            )
+            task.result = {
+                "task_id": task.task_id,
+                "agent": "support",
+                "status": final_status.value,
+                "issue": issue_desc,
+                "customer": cust_val,
+                "resolution": resolution_desc,
+                "actions_performed": actions_performed,
+                "verification": {
+                    "verified": verification.verified,
+                    "verification_type": verification.verification_type,
+                    "summary": verification.summary,
+                    "details": verification.details,
+                },
+                "summary": (
+                    f"{agent.name} successfully resolved request."
+                    if verification.verified
+                    else f"Task did not complete successfully: {verification.summary}"
+                ),
+            }
+        else:
+            task.result = {
+                "task_id": task.task_id,
+                "status": final_status.value,
+                "summary": (
+                    f"{agent.name} successfully resolved request."
+                    if verification.verified
+                    else f"Task did not complete successfully: {verification.summary}"
+                ),
+                "actions_performed": actions_performed,
+                "verification": {
+                    "verified": verification.verified,
+                    "verification_type": verification.verification_type,
+                    "summary": verification.summary,
+                    "details": verification.details,
+                },
+            }
 
         if not verification.verified:
             task.error = verification.summary
@@ -396,13 +437,33 @@ class TaskExecutionEngine:
             num = ord_match.group(1) or ord_match.group(2)
             ctx.variables["order_id"] = f"ORD-{num}"
 
-        # Lead ID patterns: LEAD-101, L001, L101
+        # Lead ID patterns: LEAD-101, LEAD-001, L001, L101
         lead_match = re.search(r"\b(?:LEAD-0*(\d+)|L0*(\d+))\b", req, re.IGNORECASE)
         if lead_match:
             num = lead_match.group(1) or lead_match.group(2)
-            # Map L001 -> LEAD-101 (demo lead) or LEAD-{num}
             lead_num = int(num)
-            ctx.variables["lead_id"] = "LEAD-101" if lead_num == 1 else f"LEAD-{lead_num:03d}"
+            if "001" in req or "L001" in req.upper():
+                ctx.variables["lead_id"] = "LEAD-001"
+            elif lead_num in (1, 101):
+                ctx.variables["lead_id"] = "LEAD-101"
+            else:
+                ctx.variables["lead_id"] = f"LEAD-{lead_num:03d}"
+
+        # Transaction ID patterns: TXN-5001, T5001
+        txn_match = re.search(r"\b(?:TXN-?0*(\d+)|T0*(\d+))\b", req, re.IGNORECASE)
+        if txn_match:
+            num = txn_match.group(1) or txn_match.group(2)
+            ctx.variables["transaction_id"] = f"TXN-{num}"
+
+        if agent.agent_id == "support":
+            from app.services.support_analyzer import SupportAnalyzer
+            analysis = SupportAnalyzer.classify_intent(req)
+            ctx.variables["intent"] = analysis.intent.value
+            ctx.variables["severity"] = analysis.severity.value
+            ctx.variables["issue_summary"] = analysis.intent.value.replace("_", " ").title()
+            for k, v in analysis.extracted_entities.items():
+                if k not in ctx.variables:
+                    ctx.variables[k] = v
 
         return ctx
 
@@ -414,7 +475,16 @@ class TaskExecutionEngine:
         action_lower = step.action.lower()
 
         # Support tools
-        if "customer" in action_lower or "account" in action_lower:
+        if "refund" in action_lower or "reimburse" in action_lower:
+            if "issue_demo_refund" in agent.available_tools:
+                return "issue_demo_refund"
+        if "escalat" in action_lower:
+            if "escalate_support_case" in agent.available_tools:
+                return "escalate_support_case"
+        if "prepare" in action_lower or "response" in action_lower or "synthesize" in action_lower or "update" in action_lower:
+            if "prepare_customer_response" in agent.available_tools:
+                return "prepare_customer_response"
+        if "customer" in action_lower or "account" in action_lower or "profile" in action_lower:
             if "lookup_customer" in agent.available_tools:
                 return "lookup_customer"
         if "order" in action_lower:
@@ -480,12 +550,16 @@ class TaskExecutionEngine:
         elif tool_id == "lookup_transaction":
             tid = params.get("transaction_id") or context.variables.get("transaction_id")
             oid = params.get("order_id") or context.variables.get("order_id")
+            cid = params.get("customer_id") or context.variables.get("customer_id")
             if tid:
                 params["transaction_id"] = tid
             elif oid:
                 params["order_id"] = oid
+            elif cid:
+                params["customer_id"] = cid
             else:
-                params["order_id"] = "ORD-5001"
+                params["order_id"] = "ORD-1001"
+
 
         elif tool_id == "lookup_lead":
             lid = params.get("lead_id") or context.variables.get("lead_id")
@@ -498,9 +572,28 @@ class TaskExecutionEngine:
             lid = params.get("lead_id") or context.variables.get("lead_id") or "LEAD-101"
             params["lead_id"] = lid
             if "status" not in params:
-                params["status"] = "qualified"
+                params["status"] = context.variables.get("lead_status") or "qualified"
             if "notes" not in params:
                 params["notes"] = f"Processed and qualified by Sales Teammate for task {context.task_id}"
+
+        elif tool_id == "n8n_process_lead":
+            lid = params.get("lead_id") or context.variables.get("lead_id") or "LEAD-001"
+            params["lead_id"] = lid
+            params["task_id"] = context.task_id
+            if "context" not in params:
+                ctx_payload = {}
+                for k in ["name", "email", "company", "source", "notes"]:
+                    if k in context.variables:
+                        ctx_payload[k] = context.variables[k]
+                params["context"] = ctx_payload
+
+        elif tool_id == "n8n_send_followup":
+            lid = params.get("lead_id") or context.variables.get("lead_id") or "LEAD-001"
+            params["lead_id"] = lid
+            params["task_id"] = context.task_id
+            if "follow_up" not in params:
+                follow_up = context.variables.get("follow_up") or {}
+                params["follow_up"] = follow_up
 
         elif tool_id == "get_business_data":
             if "metric_type" not in params:
@@ -521,6 +614,30 @@ class TaskExecutionEngine:
             if "description" not in params:
                 params["description"] = f"Action record for task {context.task_id} completed by {context.agent_id}"
 
+        elif tool_id == "prepare_customer_response":
+            params["customer_id"] = params.get("customer_id") or context.variables.get("customer_id") or "CUST-001"
+            params["order_id"] = params.get("order_id") or context.variables.get("order_id")
+            params["issue_summary"] = params.get("issue_summary") or context.variables.get("issue_summary") or user_request
+            params["proposed_resolution"] = params.get("proposed_resolution") or context.variables.get("proposed_resolution") or "Investigated customer records and established resolution"
+            params["strategy"] = params.get("strategy") or context.variables.get("response_strategy") or "Apologize + Provide Update"
+
+        elif tool_id == "issue_demo_refund":
+            cid = params.get("customer_id") or context.variables.get("customer_id") or "CUST-001"
+            params["customer_id"] = cid
+            params["transaction_id"] = params.get("transaction_id") or context.variables.get("transaction_id") or "TXN-5004"
+            params["order_id"] = params.get("order_id") or context.variables.get("order_id") or "ORD-1004"
+            if "amount" not in params:
+                params["amount"] = context.variables.get("amount") or 3200.0
+            if "reason" not in params:
+                params["reason"] = "Customer refund for failed transaction"
+
+        elif tool_id == "escalate_support_case":
+            params["task_id"] = context.task_id
+            params["customer_id"] = params.get("customer_id") or context.variables.get("customer_id") or "CUST-001"
+            params["reason"] = params.get("reason") or user_request
+            params["severity"] = params.get("severity") or context.variables.get("severity") or "HIGH"
+            params["recommended_human_action"] = params.get("recommended_human_action") or "Contact customer and verify records manually"
+
         return params
 
     def _propagate_variables(self, context: ExecutionContext, tool_id: str, data: Optional[Dict[str, Any]]) -> None:
@@ -535,14 +652,93 @@ class TaskExecutionEngine:
         elif tool_id == "lookup_order":
             if data.get("order_id"):
                 context.variables["order_id"] = data["order_id"]
+                if data.get("transaction_id"):
+                    context.variables["transaction_id"] = data["transaction_id"]
+                if data.get("status"):
+                    context.variables["order_status"] = data["status"]
             elif data.get("orders") and isinstance(data["orders"], list) and len(data["orders"]) > 0:
-                first_ord = data["orders"][0]
-                if isinstance(first_ord, dict) and first_ord.get("order_id"):
-                    context.variables["order_id"] = first_ord["order_id"]
+                # Prioritize order matching the inquiry context (e.g. pending/delayed/failed)
+                matched_ord = None
+                for ord_item in data["orders"]:
+                    if isinstance(ord_item, dict):
+                        st = ord_item.get("status", "").lower()
+                        pst = ord_item.get("payment_status", "").lower()
+                        if "delay" in context.variables.get("intent", "").lower() or "pending" in str(context.variables).lower():
+                            if st == "pending":
+                                matched_ord = ord_item
+                                break
+                        if "refund" in context.variables.get("intent", "").lower():
+                            if pst == "failed" or st == "cancelled":
+                                matched_ord = ord_item
+                                break
+                if not matched_ord:
+                    matched_ord = data["orders"][0]
+
+                if isinstance(matched_ord, dict):
+                    if matched_ord.get("order_id"):
+                        context.variables["order_id"] = matched_ord["order_id"]
+                    if matched_ord.get("transaction_id"):
+                        context.variables["transaction_id"] = matched_ord["transaction_id"]
+                    if matched_ord.get("status"):
+                        context.variables["order_status"] = matched_ord["status"]
+
+        elif tool_id == "lookup_transaction":
+            if data.get("transaction_id"):
+                context.variables["transaction_id"] = data["transaction_id"]
+            if data.get("payment_status"):
+                context.variables["payment_status"] = data["payment_status"]
+            if data.get("amount"):
+                context.variables["amount"] = data["amount"]
+
+        elif tool_id == "prepare_customer_response":
+            if data.get("customer_response"):
+                context.variables["customer_response"] = data["customer_response"]
+            if data.get("proposed_resolution"):
+                context.variables["proposed_resolution"] = data["proposed_resolution"]
+
+        elif tool_id == "issue_demo_refund":
+            if data.get("refund_id"):
+                context.variables["refund_id"] = data["refund_id"]
+            if data.get("amount"):
+                context.variables["refund_amount"] = data["amount"]
+            context.variables["proposed_resolution"] = f"Refund {data.get('refund_id')} processed successfully"
+
+        elif tool_id == "escalate_support_case":
+            if data.get("case_id"):
+                context.variables["case_id"] = data["case_id"]
+            context.variables["escalated"] = True
 
         elif tool_id == "lookup_lead":
             if data.get("lead_id"):
                 context.variables["lead_id"] = data["lead_id"]
+            if data.get("name"):
+                context.variables["name"] = data["name"]
+            if data.get("email"):
+                context.variables["email"] = data["email"]
+            if data.get("company"):
+                context.variables["company"] = data["company"]
+            if data.get("source"):
+                context.variables["source"] = data["source"]
+            if data.get("notes"):
+                context.variables["notes"] = data["notes"]
+            if data.get("status"):
+                context.variables["lead_status"] = data["status"]
+
+        elif tool_id == "n8n_process_lead":
+            if data.get("lead_id"):
+                context.variables["lead_id"] = data["lead_id"]
+            if data.get("lead_status"):
+                context.variables["lead_status"] = data["lead_status"]
+            if data.get("qualification"):
+                context.variables["qualification"] = data["qualification"]
+            if data.get("follow_up"):
+                context.variables["follow_up"] = data["follow_up"]
+            context.variables["proposed_resolution"] = f"Lead {data.get('lead_id')} qualified via n8n"
+
+        elif tool_id == "n8n_send_followup":
+            if data.get("delivery_info"):
+                context.variables["delivery_info"] = data["delivery_info"]
+            context.variables["proposed_resolution"] = "Follow-up outreach dispatched via n8n"
 
         elif tool_id == "update_lead":
             if data.get("lead_id"):
@@ -636,6 +832,12 @@ class TaskExecutionEngine:
         if not task:
             raise ValueError("Task must be provided")
 
+        if approval.status != ApprovalStatus.APPROVED:
+            approval.status = ApprovalStatus.APPROVED
+            approval.resolved_at = datetime.now(timezone.utc)
+            approval.resolved_by = resolved_by or "human_operator"
+            await self.approval_store.update_approval(approval)
+
         if not agent:
             from app.agents.router import AgentRouter
             _router = AgentRouter()
@@ -702,10 +904,23 @@ class TaskExecutionEngine:
             raise ValueError("Task must be provided")
 
         reason = rejection_reason or approval.rejection_reason or "Action rejected by human supervisor"
+        if approval.status != ApprovalStatus.REJECTED:
+            approval.status = ApprovalStatus.REJECTED
+            approval.resolved_at = datetime.now(timezone.utc)
+            approval.resolved_by = resolved_by or "human_operator"
+            approval.rejection_reason = reason
+            await self.approval_store.update_approval(approval)
+
         task.approval_required = False
         task.status = TaskStatus.FAILED
         task.error = reason
         task.current_approval_id = approval.approval_id
+        task.verification_result = {
+            "verified": False,
+            "verification_type": "human_rejection",
+            "summary": reason,
+        }
+
 
         # Mark rejected step
         if task.plan and task.plan.steps:
@@ -731,7 +946,7 @@ class TaskExecutionEngine:
         task.result = {
             "task_id": task.task_id,
             "status": TaskStatus.FAILED.value,
-            "summary": f"Task stopped: action '{approval.action}' was rejected by human operator.",
+            "summary": f"Task stopped: action '{approval.action}' was rejected by human operator: {reason}",
             "rejection_reason": reason,
             "approval": approval.model_dump(),
             "verification": {
@@ -740,6 +955,7 @@ class TaskExecutionEngine:
                 "summary": reason,
             },
         }
+
         from app.services.task_store import get_task_store
         await get_task_store().update_task(task)
         return task

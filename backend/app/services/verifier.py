@@ -100,6 +100,135 @@ class TaskVerifier:
                         summary=f"Activity creation verification failed: Activity '{activity_id}' was not persisted.",
                     )
 
+            # Verification for issue_demo_refund
+            elif tool_id == "issue_demo_refund":
+                refund_id = data.get("refund_id")
+                txn_id = data.get("transaction_id")
+                if not refund_id or not txn_id:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="record_match",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="Demo refund verification failed: missing refund_id or transaction_id.",
+                    )
+                txn = await ds.get_transaction(txn_id)
+                if txn and txn.payment_status != "refunded":
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="record_match",
+                        recommended_status=TaskStatus.FAILED,
+                        summary=f"Refund verification failed: Transaction '{txn_id}' payment status is '{txn.payment_status}', expected 'refunded'.",
+                    )
+
+            # Verification for escalate_support_case
+            elif tool_id == "escalate_support_case":
+                case_id = data.get("case_id")
+                if not case_id:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="existence_check",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="Support escalation verification failed: missing case_id.",
+                    )
+                persisted_case = await ds.get_support_case(case_id)
+                if not persisted_case:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="existence_check",
+                        recommended_status=TaskStatus.FAILED,
+                        summary=f"Support escalation verification failed: Case '{case_id}' was not persisted.",
+                    )
+                return VerificationResult(
+                    verified=True,
+                    verification_type="escalation_review",
+                    recommended_status=TaskStatus.ESCALATED,
+                    requires_human_review=True,
+                    summary=f"Support case escalated to tier-2 human supervisor: {data.get('reason')}",
+                    details=data,
+                )
+
+            # Verification for prepare_customer_response
+            elif tool_id == "prepare_customer_response":
+                cust_resp = data.get("customer_response")
+                if not cust_resp:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="response_check",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="Customer response verification failed: empty response content.",
+                    )
+
+            # Verification for n8n_process_lead
+            elif tool_id == "n8n_process_lead":
+                lead_id = data.get("lead_id")
+                expected_status = data.get("lead_status")
+                qualification = data.get("qualification") or {}
+                if not lead_id or not expected_status:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="n8n_lead_qualification",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="n8n lead processing verification failed: missing lead_id or lead_status.",
+                    )
+                # Confirm CRM database reflects the status
+                persisted_lead = await ds.get_lead(lead_id)
+                if not persisted_lead:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="n8n_lead_qualification",
+                        recommended_status=TaskStatus.FAILED,
+                        summary=f"n8n lead verification failed: Lead '{lead_id}' not found in database.",
+                    )
+                if persisted_lead.status != expected_status:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="n8n_lead_qualification",
+                        recommended_status=TaskStatus.FAILED,
+                        summary=f"n8n lead status mismatch: expected '{expected_status}', found '{persisted_lead.status}'",
+                        details={"expected": expected_status, "actual": persisted_lead.status},
+                    )
+
+            # Verification for n8n_send_followup
+            elif tool_id == "n8n_send_followup":
+                delivery = data.get("delivery_info") or {}
+                if delivery.get("status") != "delivered":
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="n8n_communication_dispatch",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="n8n follow-up verification failed: message status is not 'delivered'.",
+                        details=data,
+                    )
+
+            # Verification for n8n_operations_check
+            elif tool_id == "n8n_operations_check":
+                records_processed = data.get("records_processed")
+                exceptions_found = data.get("exceptions_found")
+                metrics = data.get("metrics") or {}
+                if records_processed is None or records_processed <= 0:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="n8n_operations_audit",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="n8n operations check verification failed: zero or missing records_processed.",
+                        details=data,
+                    )
+                if not metrics or "successful" not in metrics:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="n8n_operations_audit",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="n8n operations check verification failed: missing operational metrics.",
+                        details=data,
+                    )
+                return VerificationResult(
+                    verified=True,
+                    verification_type="n8n_operations_audit",
+                    recommended_status=TaskStatus.COMPLETED,
+                    summary=f"n8n daily operations check verified ({records_processed} records audited, {exceptions_found or 0} exceptions identified).",
+                    details=data,
+                )
+
         # 2. Check for Operational / Customer Escalation Flags
         for res in completed_tool_results:
             data = res.get("data") or {}
