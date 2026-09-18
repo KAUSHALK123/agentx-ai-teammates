@@ -109,6 +109,17 @@ export const Sidebar: React.FC = () => {
             </button>
           );
         })}
+
+        <button
+          onClick={() => {
+            sessionStorage.removeItem('agentx_gate_opened');
+            window.dispatchEvent(new Event('replay-gothic-entrance'));
+          }}
+          className="w-full mt-4 flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-red-700 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl transition-all shadow-xs cursor-pointer"
+          style={{ fontFamily: "'Cinzel', serif" }}
+        >
+          <span>🏰 Replay Gothic Entrance</span>
+        </button>
       </nav>
 
       {/* User Profile Footer */}
