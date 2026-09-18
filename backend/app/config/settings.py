@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # Server configuration
     host: str = "0.0.0.0"
     port: int = 8000
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
     
     # LLM configuration
     gemini_api_key: Optional[str] = None

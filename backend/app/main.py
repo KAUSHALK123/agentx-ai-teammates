@@ -9,6 +9,7 @@ from app.api.v1.tools import router as tools_router
 from app.api.v1.approvals import router as approvals_router
 from app.api.v1.support import router as support_router
 from app.api.v1.integrations import router as integrations_router
+from app.api.v1.inputs import router as inputs_router
 from app.api.v1 import api_v1_router
 from app.config.settings import get_settings
 
@@ -38,9 +39,10 @@ app = FastAPI(
 )
 
 # CORS middleware
+_cors_origins = [orig.strip() for orig in settings.cors_origins.split(",") if orig.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins if _cors_origins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,6 +56,7 @@ app.include_router(tools_router, prefix="/tools", tags=["Tools"])
 app.include_router(approvals_router, prefix="/approvals", tags=["Approvals"])
 app.include_router(support_router, prefix="/support", tags=["Support"])
 app.include_router(integrations_router, prefix="/integrations", tags=["Integrations"])
+app.include_router(inputs_router, prefix="/inputs", tags=["Inputs"])
 
 # Also mount under /api/v1 prefix
 app.include_router(api_v1_router, prefix="/api/v1")
@@ -73,6 +76,7 @@ async def root():
         "agents_url": "/agents",
         "tools_url": "/tools",
         "approvals_url": "/approvals",
+        "inputs_url": "/inputs",
         "plan_url": "/tasks/plan",
     }
 

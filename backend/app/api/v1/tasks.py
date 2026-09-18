@@ -35,6 +35,7 @@ async def create_task(request: TaskCreateRequest) -> TaskResponse:
     task: Task = await orchestrator.create_and_run_task(
         user_request=request.user_request,
         explicit_agent=request.selected_agent,
+        input_ids=request.input_ids,
     )
     return TaskResponse(
         task_id=task.task_id,
@@ -249,6 +250,61 @@ async def get_task_by_id(task_id: str) -> TaskDetailResponse:
         error=task.error,
         approval_required=task.approval_required,
         events=task.events,
+        input_ids=getattr(task, "input_ids", []),
+    )
+
+
+@router.get(
+    "/{task_id}/inputs",
+    summary="Get all inputs associated with a task",
+)
+async def get_task_inputs(task_id: str):
+    """Return all multimodal inputs attached to this business task."""
+    store = get_task_store()
+    task = await store.get_task(task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task with ID '{task_id}' not found",
+        )
+
+    from app.services.input_store import get_input_store
+    from app.schemas.input import InputDetailResponse, TaskInputsResponse
+
+    istore = get_input_store()
+    inputs = await istore.list_inputs_by_task(task_id)
+
+    for iid in getattr(task, "input_ids", []):
+        if iid not in [i.input_id for i in inputs]:
+            inp = await istore.get_input(iid)
+            if inp:
+                inputs.append(inp)
+
+    detail_inputs = [
+        InputDetailResponse(
+            input_id=i.input_id,
+            type=i.type,
+            filename=i.filename,
+            content_reference=i.content_reference,
+            size_bytes=i.size_bytes,
+            mime_type=i.mime_type,
+            extracted_text=i.extracted_text,
+            structured_data=i.structured_data,
+            metadata=i.metadata,
+            status=i.status,
+            error_code=i.error_code,
+            error_message=i.error_message,
+            task_id=i.task_id,
+            created_at=i.created_at,
+            updated_at=i.updated_at,
+        )
+        for i in inputs
+    ]
+
+    return TaskInputsResponse(
+        task_id=task_id,
+        total_inputs=len(detail_inputs),
+        inputs=detail_inputs,
     )
 
 
@@ -273,6 +329,7 @@ async def list_tasks(limit: int = 50) -> List[TaskDetailResponse]:
             error=t.error,
             approval_required=t.approval_required,
             events=t.events,
+            input_ids=getattr(t, "input_ids", []),
         )
         for t in tasks
     ]

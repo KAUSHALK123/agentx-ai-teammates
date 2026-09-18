@@ -62,3 +62,7 @@ node_modules/
 dist/
 .next/
 out/
+
+# Uploaded business files & storage
+data/
+data/uploads/

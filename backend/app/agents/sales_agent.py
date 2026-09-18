@@ -114,7 +114,7 @@ class SalesAgent(BaseAgent):
             )
 
         # Scenario 2: Lead processing, qualification, and follow-up preparation via n8n workflow
-        if re.search(r"\b(follow-?up|proposal|qualif|n8n|workflow)\b", req_lower):
+        if re.search(r"\b(follow-?ups?|proposal\w*|qualif\w*|n8n|workflow)\b", req_lower):
             steps = [
                 PlanStep(
                     step_id=1,

@@ -140,6 +140,10 @@ class IDataService(ABC):
     async def update_support_case(self, case: SupportCase) -> SupportCase:
         pass
 
+    @abstractmethod
+    async def list_support_cases(self) -> List[SupportCase]:
+        pass
+
 
 class DemoDataService(IDataService):
     """Realistic in-memory business data service for development and testing."""
@@ -506,6 +510,10 @@ class DemoDataService(IDataService):
             case.updated_at = datetime.now(timezone.utc)
             self._support_cases[case.case_id] = case.model_copy()
             return case.model_copy()
+
+    async def list_support_cases(self) -> List[SupportCase]:
+        async with self._lock:
+            return [c.model_copy() for c in self._support_cases.values()]
 
 
 # Global singleton instance

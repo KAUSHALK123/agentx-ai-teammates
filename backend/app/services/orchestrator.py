@@ -31,20 +31,35 @@ class TaskOrchestrator:
         self,
         user_request: str,
         explicit_agent: Optional[str] = None,
+        input_ids: Optional[list] = None,
     ) -> Task:
         """Initialize task record and immediately run the orchestration lifecycle."""
         task_id = f"task_{uuid.uuid4().hex[:12]}"
+        attached_ids = list(input_ids or [])
         
         # 1. Initialize Task
         task = Task(
             task_id=task_id,
             user_request=user_request,
             status=TaskStatus.CREATED,
+            input_ids=attached_ids,
         )
+
+        # Associate inputs in InputStore
+        if attached_ids:
+            from app.services.input_store import get_input_store
+            istore = get_input_store()
+            for iid in attached_ids:
+                await istore.associate_task(iid, task_id)
+
         task.add_event(
             stage=TaskStatus.CREATED,
             action="Initialized business task",
-            summary=f"Received request: {user_request[:80]}...",
+            summary=(
+                f"Received request with {len(attached_ids)} attached input(s): {user_request[:80]}..."
+                if attached_ids
+                else f"Received request: {user_request[:80]}..."
+            ),
         )
         await self.store.save_task(task)
 

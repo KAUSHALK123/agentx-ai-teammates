@@ -19,6 +19,12 @@ from .n8n import (
     APPROVED_N8N_WORKFLOWS,
     get_n8n_workflow_definition,
 )
+from .input import (
+    BusinessInput,
+    InputType,
+    InputStatus,
+    InputErrorCode,
+)
 
 __all__ = [
     "Task",
@@ -49,5 +55,9 @@ __all__ = [
     "N8nExecutionResult",
     "APPROVED_N8N_WORKFLOWS",
     "get_n8n_workflow_definition",
+    "BusinessInput",
+    "InputType",
+    "InputStatus",
+    "InputErrorCode",
 ]
 

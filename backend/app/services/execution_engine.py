@@ -69,7 +69,7 @@ class TaskExecutionEngine:
             summary=f"Objective: {plan.objective}",
         )
 
-        context = self._initialize_context(task, agent, plan)
+        context = await self._initialize_context(task, agent, plan)
 
         # 2. Sequential Step Processing
         execution_failed = False
@@ -420,10 +420,89 @@ class TaskExecutionEngine:
 
         return task
 
-    def _initialize_context(self, task: Task, agent: BaseAgent, plan: StructuredTaskPlan) -> ExecutionContext:
-        """Extract baseline identifiers and variables from the user request."""
+    async def _initialize_context(self, task: Task, agent: BaseAgent, plan: StructuredTaskPlan) -> ExecutionContext:
+        """Extract baseline identifiers, variables, and attached input information."""
         ctx = ExecutionContext(task_id=task.task_id, agent_id=agent.agent_id)
         req = task.user_request
+
+        # 1. Ingest attached inputs if present
+        try:
+            from app.services.input_store import get_input_store
+            from app.services.input_processor import get_input_processor
+            from app.models.input import InputStatus, InputType
+
+            input_store = get_input_store()
+            input_processor = get_input_processor()
+
+            attached_inputs = []
+            if hasattr(task, "input_ids") and task.input_ids:
+                for iid in task.input_ids:
+                    inp = await input_store.get_input(iid)
+                    if inp:
+                        attached_inputs.append(inp)
+            task_inputs = await input_store.list_inputs_by_task(task.task_id)
+            for inp in task_inputs:
+                if inp.input_id not in [i.input_id for i in attached_inputs]:
+                    attached_inputs.append(inp)
+
+            # Ensure all inputs are processed
+            for inp in attached_inputs:
+                if inp.status == InputStatus.UPLOADED:
+                    await input_processor.process_input(inp)
+                    await input_store.save_input(inp)
+
+            # Extract structured context from attached inputs
+            input_summaries = []
+            for inp in attached_inputs:
+                input_summaries.append({
+                    "input_id": inp.input_id,
+                    "type": inp.type.value,
+                    "filename": inp.filename,
+                    "status": inp.status.value,
+                    "structured_data": inp.structured_data,
+                    "metadata": inp.metadata,
+                })
+
+                if inp.type == InputType.CSV and inp.structured_data:
+                    records = inp.structured_data.get("records", [])
+                    ctx.variables["tabular_data"] = records
+                    ctx.variables["csv_columns"] = inp.structured_data.get("columns", [])
+                    ctx.variables["csv_row_count"] = inp.structured_data.get("rows", 0)
+
+                    if records:
+                        ctx.variables["extracted_leads"] = records
+                        first_record = records[0]
+                        for lid_key in ["lead_id", "id", "Lead ID", "LeadId"]:
+                            if lid_key in first_record:
+                                ctx.variables["lead_id"] = str(first_record[lid_key])
+                                break
+                        for name_key in ["name", "lead_name", "contact_name", "Name"]:
+                            if name_key in first_record:
+                                ctx.variables["lead_name"] = str(first_record[name_key])
+                                ctx.variables["name"] = str(first_record[name_key])
+                                break
+                        for email_key in ["email", "Email", "contact_email"]:
+                            if email_key in first_record:
+                                ctx.variables["email"] = str(first_record[email_key])
+                                break
+                        for comp_key in ["company", "Company", "organization"]:
+                            if comp_key in first_record:
+                                ctx.variables["company"] = str(first_record[comp_key])
+                                break
+                        for stat_key in ["status", "Status"]:
+                            if stat_key in first_record:
+                                ctx.variables["lead_status"] = str(first_record[stat_key])
+                                break
+
+                # Incorporate extracted text into text pool for ID / entity recognition
+                if inp.extracted_text:
+                    req = f"{req}\n{inp.extracted_text}"
+
+            if input_summaries:
+                ctx.variables["attached_inputs"] = input_summaries
+
+        except Exception as exc:
+            logger.warning("Error ingesting attached inputs into execution context: %s", exc)
 
         # Customer ID patterns: CUST-001, C001
         cust_match = re.search(r"\b(?:CUST-0*(\d+)|C0*(\d+))\b", req, re.IGNORECASE)
@@ -582,9 +661,26 @@ class TaskExecutionEngine:
             params["task_id"] = context.task_id
             if "context" not in params:
                 ctx_payload = {}
-                for k in ["name", "email", "company", "source", "notes"]:
+                for k in ["name", "email", "company", "source", "notes", "lead_name"]:
                     if k in context.variables:
                         ctx_payload[k] = context.variables[k]
+                if "lead_name" in context.variables and "name" not in ctx_payload:
+                    ctx_payload["name"] = context.variables["lead_name"]
+                if "extracted_leads" in context.variables:
+                    ctx_payload["leads"] = context.variables["extracted_leads"]
+                params["context"] = ctx_payload
+
+        elif tool_id == "n8n_operations_check":
+            params["task_id"] = context.task_id
+            if "category" not in params:
+                params["category"] = "daily_check"
+            if "context" not in params:
+                ctx_payload = {}
+                if "tabular_data" in context.variables:
+                    ctx_payload["tabular_data"] = context.variables["tabular_data"]
+                    ctx_payload["records"] = context.variables["tabular_data"]
+                if "csv_columns" in context.variables:
+                    ctx_payload["columns"] = context.variables["csv_columns"]
                 params["context"] = ctx_payload
 
         elif tool_id == "n8n_send_followup":

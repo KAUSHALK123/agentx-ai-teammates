@@ -60,6 +60,66 @@ async def list_approvals(
 
 
 @router.get(
+    "/pending",
+    response_model=List[ApprovalResponse],
+    summary="List pending approval requests",
+)
+async def list_pending_approvals() -> List[ApprovalResponse]:
+    """Retrieve all pending approval requests awaiting human intervention."""
+    store = get_approval_store()
+    records = await store.list_approvals(status=ApprovalStatus.PENDING)
+    return [
+        ApprovalResponse(
+            approval_id=r.approval_id,
+            task_id=r.task_id,
+            step_id=r.step_id,
+            agent_id=r.agent_id,
+            action=r.action,
+            tool_id=r.tool_id,
+            risk_level=r.risk_level,
+            reason=r.reason,
+            proposed_input=r.proposed_input,
+            status=r.status,
+            created_at=r.created_at,
+            resolved_at=r.resolved_at,
+            resolved_by=r.resolved_by,
+            rejection_reason=r.rejection_reason,
+        )
+        for r in records
+    ]
+
+
+@router.get(
+    "/task/{task_id}",
+    response_model=List[ApprovalResponse],
+    summary="List approvals for a specific task",
+)
+async def list_task_approvals(task_id: str) -> List[ApprovalResponse]:
+    """Retrieve all approval requests associated with a specific task."""
+    store = get_approval_store()
+    records = await store.list_approvals(task_id=task_id)
+    return [
+        ApprovalResponse(
+            approval_id=r.approval_id,
+            task_id=r.task_id,
+            step_id=r.step_id,
+            agent_id=r.agent_id,
+            action=r.action,
+            tool_id=r.tool_id,
+            risk_level=r.risk_level,
+            reason=r.reason,
+            proposed_input=r.proposed_input,
+            status=r.status,
+            created_at=r.created_at,
+            resolved_at=r.resolved_at,
+            resolved_by=r.resolved_by,
+            rejection_reason=r.rejection_reason,
+        )
+        for r in records
+    ]
+
+
+@router.get(
     "/{approval_id}",
     response_model=ApprovalResponse,
     summary="Retrieve an approval request by ID",
