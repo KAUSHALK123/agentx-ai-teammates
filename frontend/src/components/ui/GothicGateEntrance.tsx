@@ -41,7 +41,7 @@ export const GothicGateEntrance: React.FC<GothicGateEntranceProps> = ({ onEnterC
       filter.frequency.setValueAtTime(120, ctx.currentTime);
 
       rumbleGain.gain.setValueAtTime(0.01, ctx.currentTime);
-      rumbleGain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + 0.4);
+      rumbleGain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.4);
       rumbleGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.5);
 
       rumbleOsc.connect(filter);
@@ -58,15 +58,15 @@ export const GothicGateEntrance: React.FC<GothicGateEntranceProps> = ({ onEnterC
 
       creakOsc.type = 'sawtooth';
       creakOsc.frequency.setValueAtTime(140, ctx.currentTime);
-      creakOsc.frequency.linearRampToValueAtTime(90, ctx.currentTime + 1.2);
-      creakOsc.frequency.linearRampToValueAtTime(160, ctx.currentTime + 2.2);
+      creakOsc.frequency.linearRampToValueAtTime(85, ctx.currentTime + 1.2);
+      creakOsc.frequency.linearRampToValueAtTime(170, ctx.currentTime + 2.2);
 
       creakFilter.type = 'bandpass';
-      creakFilter.frequency.setValueAtTime(450, ctx.currentTime);
-      creakFilter.Q.setValueAtTime(4.0, ctx.currentTime);
+      creakFilter.frequency.setValueAtTime(480, ctx.currentTime);
+      creakFilter.Q.setValueAtTime(4.5, ctx.currentTime);
 
       creakGain.gain.setValueAtTime(0.01, ctx.currentTime);
-      creakGain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.3);
+      creakGain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.3);
       creakGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.4);
 
       creakOsc.connect(creakFilter);
@@ -86,7 +86,7 @@ export const GothicGateEntrance: React.FC<GothicGateEntranceProps> = ({ onEnterC
     playGateCreakSound();
     setIsOpening(true);
 
-    // Sequence: 2.2s gate swing -> 0.4s portal glow fade -> complete
+    // Sequence: 2.2s gate swing -> portal glow fade out -> complete
     setTimeout(() => {
       setIsFadingOut(true);
     }, 2000);
@@ -103,35 +103,38 @@ export const GothicGateEntrance: React.FC<GothicGateEntranceProps> = ({ onEnterC
         isFadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
-      {/* Container with camera push zoom effect */}
+      {/* 3D Scene Wrapper with Perspective */}
       <div 
         className="relative w-full h-full flex items-center justify-center transition-transform duration-[2400ms] ease-out"
         style={{
-          transform: isOpening ? 'scale(1.25)' : 'scale(1)',
-          perspective: '1200px'
+          perspective: '1400px',
+          transform: isOpening ? 'scale(1.18)' : 'scale(1)'
         }}
       >
-        {/* STATIONARY BACKGROUND LAYER (Pillars, Torches, Crimson Moon & Portal behind gates) */}
+        {/* 1. STATIC BACKGROUND LAYER (gothic_bg.jpg - Pillars, Torches, Red Moon, Ground, Crimson Portal - NO GATE UNDERNEATH!) */}
         <div className="absolute inset-0 z-0">
-          {/* Base Environment Image */}
           <div 
             className="w-full h-full bg-cover bg-center"
-            style={{ backgroundImage: "url('/gothic_gate.jpg')" }}
+            style={{ backgroundImage: "url('/gothic_bg.jpg')" }}
           />
 
-          {/* Central Crimson Light Portal (Revealed when gates open) */}
+          {/* Intensifying Crimson Light Portal behind gates */}
           <div 
             className={`absolute inset-0 flex items-center justify-center transition-opacity duration-1000 ${
               isOpening ? 'opacity-100' : 'opacity-40'
             }`}
           >
-            <div className="w-[60vw] h-[80vh] bg-gradient-to-t from-red-600 via-rose-700 to-amber-500 rounded-full blur-[100px] opacity-80 animate-pulse" />
-            <div className="absolute w-[40vw] h-[60vh] bg-red-500 rounded-full blur-[70px] opacity-90" />
+            <div className="w-[50vw] h-[75vh] bg-gradient-to-t from-red-600 via-rose-600 to-amber-400 rounded-full blur-[90px] opacity-90 animate-pulse" />
+            <div className="absolute w-[35vw] h-[55vh] bg-red-500 rounded-full blur-[60px] opacity-100" />
           </div>
 
-          {/* Dark Vignette & Ground Crimson Fog */}
+          {/* Ground Fog & Dark Vignette */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-red-950/90 pointer-events-none" />
-          <div className="absolute bottom-0 inset-x-0 h-48 bg-gradient-to-t from-black via-red-950/60 to-transparent blur-md pointer-events-none" />
+          <div 
+            className={`absolute bottom-0 inset-x-0 h-64 bg-gradient-to-t from-black via-red-950/70 to-transparent blur-lg pointer-events-none transition-transform duration-[2200ms] ${
+              isOpening ? 'scale-125 opacity-100' : 'scale-100 opacity-80'
+            }`}
+          />
         </div>
 
         {/* FLOATING RED EMBERS & PARTICLES */}
@@ -152,52 +155,51 @@ export const GothicGateEntrance: React.FC<GothicGateEntranceProps> = ({ onEnterC
           ))}
         </div>
 
-        {/* INDEPENDENT GATES CONTAINER (LEFT & RIGHT DOUBLE GATES) */}
-        <div className="absolute inset-0 z-20 flex overflow-hidden">
-          {/* LEFT GATE DOOR LAYER */}
-          <div 
-            className="w-1/2 h-full relative border-r border-red-950/40 shadow-2xl"
-            style={{
-              backgroundImage: "url('/gothic_gate.jpg')",
-              backgroundSize: '200% 100%',
-              backgroundPosition: 'left center',
-              transformOrigin: 'left center',
-              transform: isOpening ? 'translateX(-105%) rotateY(-25deg)' : 'translateX(0%) rotateY(0deg)',
-              transition: 'transform 2.2s cubic-bezier(0.7, 0, 0.2, 1)',
-              boxShadow: isOpening ? '-20px 0 50px rgba(0,0,0,0.9)' : 'none'
-            }}
-          >
-            {/* Center seam glow line */}
-            <div className="absolute right-0 top-0 bottom-0 w-[2px] bg-red-500/80 shadow-[0_0_15px_#ef4444]" />
-          </div>
+        {/* 2. LEFT GATE LAYER (gothic_left_gate.png) */}
+        <div
+          className="absolute inset-0 z-20 pointer-events-none"
+          style={{
+            backgroundImage: "url('/gothic_left_gate.png')",
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            transformOrigin: 'left center',
+            transform: isOpening
+              ? 'translateX(-105%) rotateY(-25deg)'
+              : 'translateX(0%) rotateY(0deg)',
+            transition: 'transform 2.2s cubic-bezier(0.7, 0, 0.2, 1), filter 2.2s cubic-bezier(0.7, 0, 0.2, 1)',
+            filter: isOpening 
+              ? 'drop-shadow(-25px 0 40px rgba(0,0,0,0.95)) blur(0.5px)' 
+              : 'drop-shadow(-5px 0 15px rgba(0,0,0,0.8))'
+          }}
+        />
 
-          {/* RIGHT GATE DOOR LAYER */}
-          <div 
-            className="w-1/2 h-full relative border-l border-red-950/40 shadow-2xl"
-            style={{
-              backgroundImage: "url('/gothic_gate.jpg')",
-              backgroundSize: '200% 100%',
-              backgroundPosition: 'right center',
-              transformOrigin: 'right center',
-              transform: isOpening ? 'translateX(105%) rotateY(25deg)' : 'translateX(0%) rotateY(0deg)',
-              transition: 'transform 2.2s cubic-bezier(0.7, 0, 0.2, 1)',
-              boxShadow: isOpening ? '20px 0 50px rgba(0,0,0,0.9)' : 'none'
-            }}
-          >
-            {/* Center seam glow line */}
-            <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-red-500/80 shadow-[0_0_15px_#ef4444]" />
-          </div>
-        </div>
+        {/* 3. RIGHT GATE LAYER (gothic_right_gate.png) */}
+        <div
+          className="absolute inset-0 z-20 pointer-events-none"
+          style={{
+            backgroundImage: "url('/gothic_right_gate.png')",
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            transformOrigin: 'right center',
+            transform: isOpening
+              ? 'translateX(105%) rotateY(25deg)'
+              : 'translateX(0%) rotateY(0deg)',
+            transition: 'transform 2.2s cubic-bezier(0.7, 0, 0.2, 1), filter 2.2s cubic-bezier(0.7, 0, 0.2, 1)',
+            filter: isOpening 
+              ? 'drop-shadow(25px 0 40px rgba(0,0,0,0.95)) blur(0.5px)' 
+              : 'drop-shadow(5px 0 15px rgba(0,0,0,0.8))'
+          }}
+        />
 
-        {/* AGENTX BRANDING & OPEN THE GATES UI (Fades out when gates open) */}
+        {/* AGENTX BRANDING & OPEN THE GATES UI */}
         <div 
           className={`relative z-30 flex flex-col items-center justify-center text-center px-6 transition-all duration-700 ${
-            isOpening ? 'opacity-0 scale-90 pointer-events-none translate-y-4' : 'opacity-100 scale-100'
+            isOpening ? 'opacity-0 scale-90 pointer-events-none translate-y-6' : 'opacity-100 scale-100'
           }`}
         >
-          {/* Main Title: AGENTX */}
+          {/* Title: AGENTX */}
           <h1 
-            className="text-6xl sm:text-7xl md:text-9xl font-bold tracking-widest text-slate-100 drop-shadow-[0_10px_25px_rgba(0,0,0,0.9)]"
+            className="text-6xl sm:text-7xl md:text-9xl font-bold tracking-widest text-slate-100 drop-shadow-[0_10px_30px_rgba(0,0,0,0.95)]"
             style={{ fontFamily: "'Cinzel Decorative', 'Cinzel', serif" }}
           >
             AGENT<span className="text-red-600 drop-shadow-[0_0_35px_#ff1e38] animate-pulse">X</span>
@@ -214,7 +216,7 @@ export const GothicGateEntrance: React.FC<GothicGateEntranceProps> = ({ onEnterC
           {/* Medieval Gothic Button: OPEN THE GATES */}
           <button
             onClick={handleOpenGates}
-            className="group relative px-10 py-4 sm:px-14 sm:py-5 bg-black/80 hover:bg-black text-red-100 border-2 border-red-900/80 hover:border-red-500 rounded-none shadow-[0_0_25px_rgba(127,29,29,0.5)] hover:shadow-[0_0_50px_rgba(239,68,68,0.8)] transition-all duration-300 hover:scale-105 cursor-pointer overflow-hidden"
+            className="group relative px-10 py-4 sm:px-14 sm:py-5 bg-black/85 hover:bg-black text-red-100 border-2 border-red-900/80 hover:border-red-500 rounded-none shadow-[0_0_25px_rgba(127,29,29,0.5)] hover:shadow-[0_0_50px_rgba(239,68,68,0.85)] transition-all duration-300 hover:scale-105 cursor-pointer overflow-hidden"
           >
             {/* Corner Medieval Accents */}
             <div className="absolute top-1 left-1 w-2 h-2 border-t-2 border-l-2 border-red-500" />
@@ -242,7 +244,7 @@ export const GothicGateEntrance: React.FC<GothicGateEntranceProps> = ({ onEnterC
         </div>
       </div>
 
-      {/* Floating Particle Animation Keyframes */}
+      {/* Floating Embers CSS Keyframes */}
       <style>{`
         @keyframes floatUp {
           0% {
