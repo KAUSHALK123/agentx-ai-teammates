@@ -40,13 +40,13 @@ class N8nToolProvider:
 
     async def _discover_fallback_port(self) -> Optional[str]:
         """Probe common alternative Docker host ports when primary port connection fails."""
-        for alt_port in [32769, 32768, 5678]:
-            for host in ["localhost", "127.0.0.1"]:
+        for alt_port in [32770, 32769, 32768, 32771, 32772, 5678]:
+            for host in ["127.0.0.1", "localhost"]:
                 alt_url = f"http://{host}:{alt_port}"
                 if alt_url == self.base_url:
                     continue
                 try:
-                    async with httpx.AsyncClient(timeout=1.0) as client:
+                    async with httpx.AsyncClient(timeout=0.8) as client:
                         res = await client.get(f"{alt_url}/healthz")
                         if res.status_code == 200:
                             logger.info("Auto-discovered active n8n instance at %s (switching from %s)", alt_url, self.base_url)
@@ -187,6 +187,11 @@ class N8nToolProvider:
                         actions=data.get("actions", []),
                         follow_up=data.get("follow_up"),
                         delivery_info=data.get("delivery_info"),
+                        records_processed=data.get("records_processed"),
+                        exceptions_found=data.get("exceptions_found"),
+                        requires_attention=data.get("requires_attention"),
+                        metrics=data.get("metrics"),
+                        report=data.get("report"),
                         error=data.get("error") if not success else None,
                         timestamp=data.get("timestamp"),
                     )

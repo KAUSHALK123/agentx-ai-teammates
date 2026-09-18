@@ -46,6 +46,18 @@ WORKFLOWS = [
             },
         },
     },
+    {
+        "file": "d:/PROJECTS/paytm-agent/agentx-ai-teammates/backend/workflows/operations_daily_business_check.json",
+        "container_path": "/home/node/operations_daily_business_check.json",
+        "webhook_path": "agentx-operations-daily-check",
+        "test_payload": {
+            "task_id": "test-task-ops",
+            "agent_id": "operations",
+            "workflow_id": "operations_daily_business_check",
+            "requested_action": "daily_business_check",
+            "context": {"category": "daily_audit"},
+        },
+    },
 ]
 
 
@@ -54,6 +66,17 @@ def run_cmd(cmd: list[str]) -> tuple[int, str]:
     res = subprocess.run(cmd, capture_output=True, text=True)
     out = (res.stdout + "\n" + res.stderr).strip()
     return res.returncode, out
+
+
+def get_active_n8n_port() -> int:
+    """Detect dynamic mapped port from Docker container."""
+    code, out = run_cmd(["docker", "port", "n8n", "5678"])
+    if code == 0 and ":" in out:
+        for line in out.splitlines():
+            parts = line.strip().split(":")
+            if len(parts) >= 2 and parts[-1].isdigit():
+                return int(parts[-1])
+    return 32768
 
 
 def setup():
@@ -71,16 +94,34 @@ def setup():
         code, out = run_cmd(["docker", "exec", "n8n", "n8n", "import:workflow", f"--input={wf['container_path']}"])
         logger.info("Import output: %s", out)
 
-    # 3. Publish workflows
-    code, out = run_cmd(["docker", "exec", "n8n", "n8n", "publish:workflow", "--all"])
-    logger.info("Publish output: %s", out)
+    # 3. List workflows and publish each by ID
+    code, out = run_cmd(["docker", "exec", "n8n", "n8n", "list:workflow"])
+    logger.info("Workflow list:\n%s", out)
+    if code == 0:
+        for line in out.splitlines():
+            if "|" in line and "AgentX" in line:
+                wf_id = line.split("|")[0].strip()
+                logger.info("Publishing workflow: %s", wf_id)
+                run_cmd(["docker", "exec", "n8n", "n8n", "publish:workflow", f"--id={wf_id}"])
 
-    # 4. Give n8n a second to register webhooks
-    time.sleep(2)
+    # 4. Restart container so webhooks are active
+    logger.info("Restarting n8n container to bind published webhooks...")
+    run_cmd(["docker", "restart", "n8n"])
+    
+    port = get_active_n8n_port()
+    base_url = f"http://localhost:{port}"
+    logger.info("Waiting for n8n instance at %s to be ready...", base_url)
 
-    # 5. Test webhooks
-    base_url = "http://localhost:32768"
     client = httpx.Client(timeout=10.0)
+    for _ in range(15):
+        time.sleep(1)
+        try:
+            r = client.get(f"{base_url}/healthz")
+            if r.status_code == 200:
+                logger.info("n8n is ready on %s", base_url)
+                break
+        except Exception:
+            pass
 
     for wf in WORKFLOWS:
         url = f"{base_url}/webhook/{wf['webhook_path']}"

@@ -51,6 +51,7 @@ class ToolExecutionService:
             "get_business_data",
             "verify_record",
             "create_activity",
+            "n8n_operations_check",
         },
     }
 

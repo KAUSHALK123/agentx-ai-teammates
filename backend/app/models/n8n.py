@@ -36,6 +36,11 @@ class N8nExecutionResult(BaseModel):
     actions: List[str] = Field(default_factory=list)
     follow_up: Optional[Dict[str, Any]] = None
     delivery_info: Optional[Dict[str, Any]] = None
+    records_processed: Optional[int] = None
+    exceptions_found: Optional[int] = None
+    requires_attention: Optional[bool] = None
+    metrics: Optional[Dict[str, Any]] = None
+    report: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     timestamp: Optional[str] = None
 
@@ -98,6 +103,37 @@ APPROVED_N8N_WORKFLOWS: Dict[str, N8nWorkflowDefinition] = {
                 "lead_id": {"type": "string"},
                 "delivery_info": {"type": "object"},
                 "actions": {"type": "array"},
+            },
+        },
+    ),
+    "operations_daily_business_check": N8nWorkflowDefinition(
+        workflow_id="operations_daily_business_check",
+        name="Operations — Daily Business Check",
+        purpose="Process daily business data feeds, calculate operational metrics, detect exceptions/anomalies, compile status reports, and create follow-up activity records.",
+        allowed_agent="operations",
+        risk_level="LOW",
+        webhook_path="agentx-operations-daily-check",
+        input_schema={
+            "type": "object",
+            "required": ["task_id"],
+            "properties": {
+                "task_id": {"type": "string"},
+                "requested_action": {"type": "string"},
+                "context": {"type": "object"},
+            },
+        },
+        output_schema={
+            "type": "object",
+            "required": ["success", "workflow", "records_processed", "exceptions_found", "requires_attention"],
+            "properties": {
+                "success": {"type": "boolean"},
+                "workflow": {"type": "string"},
+                "records_processed": {"type": "integer"},
+                "exceptions_found": {"type": "integer"},
+                "requires_attention": {"type": "boolean"},
+                "metrics": {"type": "object"},
+                "actions": {"type": "array"},
+                "report": {"type": "object"},
             },
         },
     ),

@@ -231,3 +231,103 @@ class N8nSendFollowupTool(BaseTool):
                 error=str(exc),
                 message="Unexpected error invoking n8n follow-up dispatch workflow",
             )
+
+
+class N8nOperationsDailyCheckTool(BaseTool):
+    """Tool that orchestrates multi-step daily operations audit and exception detection via n8n."""
+    tool_id: str = "n8n_operations_check"
+    name: str = "n8n Daily Operational Check Workflow"
+    description: str = (
+        "Invoke n8n workflow to audit business data feeds, compute operational KPIs, "
+        "detect deterministic exceptions, compile status reports, and create follow-up activity records."
+    )
+    category: str = "operations"
+    is_write: bool = True
+    input_schema: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "task_id": {"type": "string", "description": "Current AgentX task ID"},
+            "category": {"type": "string", "description": "Operational audit category (e.g. daily_summary)"},
+            "context": {"type": "object", "description": "Optional additional operational context"},
+        },
+    }
+    output_schema: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "workflow": {"type": "string"},
+            "records_processed": {"type": "integer"},
+            "exceptions_found": {"type": "integer"},
+            "requires_attention": {"type": "boolean"},
+            "metrics": {"type": "object"},
+            "actions": {"type": "array"},
+            "report": {"type": "object"},
+        },
+    }
+
+    def __init__(
+        self,
+        n8n_provider: Optional[N8nToolProvider] = None,
+        data_service: Optional[IDataService] = None,
+    ):
+        self.n8n_provider = n8n_provider or get_n8n_provider()
+        self.data_service = data_service or get_data_service()
+
+    async def execute(self, **kwargs: Any) -> ToolResult:
+        task_id = kwargs.get("task_id") or "task-operations-daily"
+        category = kwargs.get("category") or "daily_check"
+        context = kwargs.get("context") or {}
+        if isinstance(context, str):
+            context = {"raw_context": context}
+
+        # Include category in context
+        context["category"] = category
+
+        payload = N8nInvocationPayload(
+            task_id=str(task_id),
+            agent_id="operations",
+            workflow_id="operations_daily_business_check",
+            requested_action="daily_business_check",
+            context=context,
+        )
+
+        try:
+            res = await self.n8n_provider.invoke_workflow(payload)
+            if not res.success:
+                return ToolResult(
+                    success=False,
+                    tool_id=self.tool_id,
+                    error=res.error or "n8n operations workflow execution failed",
+                    data=res.model_dump(),
+                    message=f"n8n operations error: {res.error}",
+                )
+
+            # Synchronize created follow-up activities to data service
+            report = res.report or {}
+            created_activities = report.get("created_activities", [])
+            for act in created_activities:
+                act_type = act.get("type", "operational_followup")
+                target = act.get("target", "system")
+                await self.data_service.create_activity(
+                    task_id=str(task_id),
+                    activity_type=act_type,
+                    description=f"Automated follow-up created for {target} via n8n operational workflow",
+                )
+
+            summary = report.get("summary") or f"Daily operations check completed ({res.records_processed} records, {res.exceptions_found} exceptions)."
+
+            return ToolResult(
+                success=True,
+                tool_id=self.tool_id,
+                data=res.model_dump(),
+                message=summary,
+            )
+        except Exception as exc:
+            logger.exception("N8nOperationsDailyCheckTool invocation exception: %s", exc)
+            return ToolResult(
+                success=False,
+                tool_id=self.tool_id,
+                error=str(exc),
+                message="Unexpected error invoking n8n daily operations workflow",
+            )
+

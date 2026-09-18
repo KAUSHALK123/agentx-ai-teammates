@@ -531,6 +531,7 @@ def initialize_default_tools() -> None:
     from app.tools.n8n_tools import (
         N8nProcessLeadTool,
         N8nSendFollowupTool,
+        N8nOperationsDailyCheckTool,
     )
     registry = get_tool_registry()
     tools = [
@@ -547,6 +548,7 @@ def initialize_default_tools() -> None:
         EscalateSupportCaseTool(),
         N8nProcessLeadTool(),
         N8nSendFollowupTool(),
+        N8nOperationsDailyCheckTool(),
     ]
     for tool in tools:
         if not registry.has_tool(tool.tool_id):

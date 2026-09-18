@@ -200,6 +200,35 @@ class TaskVerifier:
                         details=data,
                     )
 
+            # Verification for n8n_operations_check
+            elif tool_id == "n8n_operations_check":
+                records_processed = data.get("records_processed")
+                exceptions_found = data.get("exceptions_found")
+                metrics = data.get("metrics") or {}
+                if records_processed is None or records_processed <= 0:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="n8n_operations_audit",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="n8n operations check verification failed: zero or missing records_processed.",
+                        details=data,
+                    )
+                if not metrics or "successful" not in metrics:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="n8n_operations_audit",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="n8n operations check verification failed: missing operational metrics.",
+                        details=data,
+                    )
+                return VerificationResult(
+                    verified=True,
+                    verification_type="n8n_operations_audit",
+                    recommended_status=TaskStatus.COMPLETED,
+                    summary=f"n8n daily operations check verified ({records_processed} records audited, {exceptions_found or 0} exceptions identified).",
+                    details=data,
+                )
+
         # 2. Check for Operational / Customer Escalation Flags
         for res in completed_tool_results:
             data = res.get("data") or {}
