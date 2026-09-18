@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   PlayCircle, 
@@ -14,8 +14,12 @@ import {
   ArrowRight, 
   RotateCcw,
   Check,
-  X
+  X,
+  AlertTriangle,
+  ListChecks,
+  AlertCircle
 } from 'lucide-react';
+import { tasksApi } from '../../api';
 
 export const TaskExecutionView: React.FC = () => {
   const { 
@@ -26,14 +30,33 @@ export const TaskExecutionView: React.FC = () => {
     setActiveApprovalModal,
     approveTaskAction,
     rejectTaskAction,
-    startLiveSimulation
+    startLiveSimulation,
+    isBackendConnected,
+    refreshTasks
   } = useApp();
 
   const [expandedStepId, setExpandedStepId] = useState<string | null>('step-3');
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
+  const [isLoadingTrace, setIsLoadingTrace] = useState(false);
 
   const task = (tasks || []).find(t => t.id === selectedTaskId) || (tasks && tasks.length > 0 ? tasks[0] : null);
+
+  // Fetch execution details when selectedTaskId changes
+  useEffect(() => {
+    let isMounted = true;
+    if (selectedTaskId && isBackendConnected && task) {
+      setIsLoadingTrace(true);
+      tasksApi.getTaskExecution(selectedTaskId)
+        .then(() => {
+          if (isMounted) setIsLoadingTrace(false);
+        })
+        .catch(() => {
+          if (isMounted) setIsLoadingTrace(false);
+        });
+    }
+    return () => { isMounted = false; };
+  }, [selectedTaskId, isBackendConnected]);
 
   if (!task) {
     return (
@@ -63,7 +86,7 @@ export const TaskExecutionView: React.FC = () => {
 
   const stepsList = task.steps || [];
   const currentStep = stepsList.find(s => s.status === 'IN_PROGRESS') || stepsList[task.currentStepIndex - 1] || stepsList[0];
-  const isWaitingApproval = task.status === 'WAITING_FOR_APPROVAL' && task.approvalRequest;
+  const isWaitingApproval = (task.status === 'WAITING_FOR_APPROVAL' || (task.status as string) === 'APPROVAL_REQUIRED') && task.approvalRequest;
 
   const toggleExpand = (id: string) => {
     setExpandedStepId(expandedStepId === id ? null : id);
@@ -71,6 +94,7 @@ export const TaskExecutionView: React.FC = () => {
 
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto space-y-8">
+      {/* Header & Task Selector */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -97,15 +121,19 @@ export const TaskExecutionView: React.FC = () => {
           </select>
 
           <button
-            onClick={() => startLiveSimulation(task.id)}
-            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-300 shadow-xs transition-colors"
-            title="Restart Execution Simulation"
+            onClick={() => {
+              if (isBackendConnected) refreshTasks();
+              else startLiveSimulation(task.id);
+            }}
+            className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-300 shadow-xs transition-colors cursor-pointer"
+            title="Refresh Task Status"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className={`w-4 h-4 ${isLoadingTrace ? 'animate-spin text-indigo-600' : ''}`} />
           </button>
         </div>
       </div>
 
+      {/* Overview Stat Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
         <div>
           <p className="text-[10px] uppercase font-mono text-slate-500 font-bold">Execution Status</p>
@@ -113,6 +141,8 @@ export const TaskExecutionView: React.FC = () => {
             <span className={`w-2 h-2 rounded-full ${
               task.status === 'COMPLETED' ? 'bg-emerald-500' :
               task.status === 'WAITING_FOR_APPROVAL' ? 'bg-amber-500 animate-ping' :
+              task.status === 'FAILED' ? 'bg-red-500' :
+              task.status === 'ESCALATED' ? 'bg-purple-500' :
               'bg-indigo-600 animate-pulse'
             }`}></span>
             <span className="text-sm font-bold text-slate-900 uppercase font-mono">{task.status}</span>
@@ -143,6 +173,7 @@ export const TaskExecutionView: React.FC = () => {
         </div>
       </div>
 
+      {/* Human Approval Needed Banner */}
       {isWaitingApproval && task.approvalRequest && (
         <div className="glass-card p-6 rounded-2xl border-2 border-amber-300 bg-amber-50/50 shadow-xl space-y-4 animate-in fade-in duration-300">
           <div className="flex items-start justify-between">
@@ -165,7 +196,7 @@ export const TaskExecutionView: React.FC = () => {
 
             <button
               onClick={() => setActiveApprovalModal(task.approvalRequest!)}
-              className="text-xs text-amber-700 hover:underline font-bold flex items-center gap-1"
+              className="text-xs text-amber-700 hover:underline font-bold flex items-center gap-1 cursor-pointer"
             >
               Open Full Modal →
             </button>
@@ -192,13 +223,13 @@ export const TaskExecutionView: React.FC = () => {
                 />
                 <button
                   onClick={() => rejectTaskAction(task.approvalRequest!.id, rejectionReason)}
-                  className="px-4 py-2 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 shadow-xs"
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 shadow-xs cursor-pointer"
                 >
                   Confirm Reject
                 </button>
                 <button
                   onClick={() => setShowRejectInput(false)}
-                  className="px-3 py-2 text-xs text-slate-500 font-medium"
+                  className="px-3 py-2 text-xs text-slate-500 font-medium cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -206,7 +237,7 @@ export const TaskExecutionView: React.FC = () => {
             ) : (
               <button
                 onClick={() => setShowRejectInput(true)}
-                className="px-4 py-2 rounded-xl bg-white hover:bg-red-50 text-red-600 text-xs font-bold border border-red-200 transition-colors flex items-center gap-1.5 shadow-xs"
+                className="px-4 py-2 rounded-xl bg-white hover:bg-red-50 text-red-600 text-xs font-bold border border-red-200 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
               >
                 <X className="w-4 h-4" />
                 <span>Reject Action</span>
@@ -215,7 +246,7 @@ export const TaskExecutionView: React.FC = () => {
 
             <button
               onClick={() => approveTaskAction(task.approvalRequest!.id)}
-              className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition-all hover:scale-105 flex items-center gap-2"
+              className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition-all hover:scale-105 flex items-center gap-2 cursor-pointer"
             >
               <Check className="w-4 h-4 stroke-[3]" />
               <span>Approve & Continue Task</span>
@@ -224,6 +255,7 @@ export const TaskExecutionView: React.FC = () => {
         </div>
       )}
 
+      {/* Active Step & Progress Bar */}
       <div className="glass-card p-6 rounded-2xl border border-slate-200 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -260,13 +292,14 @@ export const TaskExecutionView: React.FC = () => {
         )}
       </div>
 
+      {/* Timeline Breakdown */}
       <div className="glass-card p-6 rounded-2xl border border-slate-200 space-y-6">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
             <PlayCircle className="w-5 h-5 text-indigo-600" />
             <span>Execution Timeline</span>
           </h3>
-          <span className="text-xs text-slate-500 font-mono font-bold">Clean Business Steps (No Chain-of-Thought)</span>
+          <span className="text-xs text-slate-500 font-mono font-bold">Clean Business Steps (No Chain-of-Thought Exposed)</span>
         </div>
 
         <div className="space-y-4 relative before:absolute before:left-4 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
@@ -274,6 +307,7 @@ export const TaskExecutionView: React.FC = () => {
             const isDone = step.status === 'COMPLETED';
             const isInProgress = step.status === 'IN_PROGRESS';
             const isWaiting = step.status === 'WAITING';
+            const isFailed = step.status === 'FAILED';
             const isExpanded = expandedStepId === step.id;
 
             return (
@@ -282,9 +316,11 @@ export const TaskExecutionView: React.FC = () => {
                   isDone ? 'bg-emerald-50 text-emerald-600 border-emerald-300' :
                   isInProgress ? 'bg-indigo-50 text-indigo-600 border-indigo-400 animate-pulse' :
                   isWaiting ? 'bg-amber-50 text-amber-700 border-amber-300' :
+                  isFailed ? 'bg-red-50 text-red-600 border-red-300' :
                   'bg-slate-100 text-slate-400 border-slate-200'
                 }`}>
                   {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> :
+                   isFailed ? <AlertCircle className="w-4 h-4 text-red-600" /> :
                    isInProgress ? <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping"></span> :
                    step.stepIndex}
                 </div>
@@ -338,6 +374,49 @@ export const TaskExecutionView: React.FC = () => {
         </div>
       </div>
 
+      {/* Verification Status Card */}
+      {task.verificationReport && (
+        <div className="glass-card p-6 rounded-2xl border border-slate-200 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <ListChecks className="w-4 h-4 text-indigo-600" />
+              <span>Automated Verification Audit</span>
+            </h3>
+            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+              task.verificationReport.verified
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                : 'bg-amber-50 text-amber-700 border border-amber-200'
+            }`}>
+              {task.verificationReport.verified ? 'VERIFIED PASSED' : 'VERIFICATION PENDING'}
+            </span>
+          </div>
+
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500 font-mono font-bold">Safety Risk Score:</span>
+              <span className="font-mono font-bold text-slate-900">{task.verificationReport.riskScore ?? 0.0}</span>
+            </div>
+            {task.verificationReport.notes && (
+              <p className="text-slate-700 font-medium"><strong>Notes:</strong> {task.verificationReport.notes}</p>
+            )}
+            {task.verificationReport.criteriaChecked && task.verificationReport.criteriaChecked.length > 0 && (
+              <div className="space-y-1 pt-1">
+                <p className="text-[10px] font-mono font-bold text-slate-500 uppercase">Checked Criteria:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {task.verificationReport.criteriaChecked.map((c, idx) => (
+                    <span key={idx} className="px-2 py-0.5 bg-white border border-slate-200 rounded text-[11px] font-medium text-slate-800 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                      {c}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Completed State */}
       {task.status === 'COMPLETED' && (
         <div className="glass-card p-6 rounded-2xl border-2 border-emerald-300 bg-emerald-50/50 space-y-4">
           <div className="flex items-center gap-3">
@@ -351,18 +430,56 @@ export const TaskExecutionView: React.FC = () => {
           </div>
 
           <p className="text-xs text-slate-800 bg-white p-4 rounded-xl border border-slate-200 leading-relaxed font-semibold shadow-xs">
-            {task.resultSummary}
+            {task.resultSummary || 'Task successfully executed.'}
           </p>
 
           {task.supportReview && (
             <button
               onClick={() => setActiveTab('support-review')}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5"
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <span>View Support Review Collaboration View</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           )}
+        </div>
+      )}
+
+      {/* Failed State */}
+      {task.status === 'FAILED' && (
+        <div className="glass-card p-6 rounded-2xl border-2 border-red-300 bg-red-50/50 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-100 text-red-700 flex items-center justify-center font-bold">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Execution Failed</h3>
+              <p className="text-xs text-red-700 font-medium">Task encountered an execution error or guardrail failure.</p>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-800 bg-white p-4 rounded-xl border border-slate-200 leading-relaxed font-semibold shadow-xs">
+            {task.resultSummary || 'Task execution failed. Please check error logs.'}
+          </p>
+        </div>
+      )}
+
+      {/* Escalated State */}
+      {task.status === 'ESCALATED' && (
+        <div className="glass-card p-6 rounded-2xl border-2 border-purple-300 bg-purple-50/50 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Task Escalated to Human Supervisor</h3>
+              <p className="text-xs text-purple-700 font-medium">Proposed action was rejected by human operator or triggered policy escalation.</p>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-800 bg-white p-4 rounded-xl border border-slate-200 leading-relaxed font-semibold shadow-xs">
+            {task.resultSummary || 'Task stopped following human rejection.'}
+          </p>
         </div>
       )}
     </div>
