@@ -35,6 +35,9 @@ class ToolExecutionService:
             "lookup_order",
             "lookup_transaction",
             "create_activity",
+            "prepare_customer_response",
+            "issue_demo_refund",
+            "escalate_support_case",
         },
         AgentType.SALES.value: {
             "lookup_customer",

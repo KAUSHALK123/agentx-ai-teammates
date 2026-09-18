@@ -191,12 +191,22 @@ class LookupTransactionTool(BaseTool):
                     tid = match.group(0)
 
         if not tid:
+            cid = kwargs.get("customer_id")
+            if cid:
+                orders = await self.data_service.get_orders_for_customer(str(cid))
+                if orders:
+                    failed_ord = next((o for o in orders if o.payment_status == "failed"), None)
+                    chosen = failed_ord or orders[0]
+                    tid = chosen.transaction_id
+
+        if not tid:
             return ToolResult(
                 success=False,
                 tool_id=self.tool_id,
                 error="Missing required transaction identifier",
-                message="Provide transaction_id or order_id",
+                message="Provide transaction_id, order_id, or customer_id",
             )
+
 
         try:
             txn = await self.data_service.get_transaction(str(tid))
@@ -513,6 +523,11 @@ class CreateActivityTool(BaseTool):
 
 def initialize_default_tools() -> None:
     """Register all standard AgentX tools into the global ToolRegistry."""
+    from app.tools.support_tools import (
+        PrepareCustomerResponseTool,
+        IssueDemoRefundTool,
+        EscalateSupportCaseTool,
+    )
     registry = get_tool_registry()
     tools = [
         LookupCustomerTool(),
@@ -523,6 +538,9 @@ def initialize_default_tools() -> None:
         GetBusinessDataTool(),
         VerifyRecordTool(),
         CreateActivityTool(),
+        PrepareCustomerResponseTool(),
+        IssueDemoRefundTool(),
+        EscalateSupportCaseTool(),
     ]
     for tool in tools:
         if not registry.has_tool(tool.tool_id):
@@ -531,3 +549,4 @@ def initialize_default_tools() -> None:
 
 # Initialize standard registry on module import
 initialize_default_tools()
+

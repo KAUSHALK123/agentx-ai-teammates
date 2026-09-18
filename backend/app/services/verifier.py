@@ -100,6 +100,64 @@ class TaskVerifier:
                         summary=f"Activity creation verification failed: Activity '{activity_id}' was not persisted.",
                     )
 
+            # Verification for issue_demo_refund
+            elif tool_id == "issue_demo_refund":
+                refund_id = data.get("refund_id")
+                txn_id = data.get("transaction_id")
+                if not refund_id or not txn_id:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="record_match",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="Demo refund verification failed: missing refund_id or transaction_id.",
+                    )
+                txn = await ds.get_transaction(txn_id)
+                if txn and txn.payment_status != "refunded":
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="record_match",
+                        recommended_status=TaskStatus.FAILED,
+                        summary=f"Refund verification failed: Transaction '{txn_id}' payment status is '{txn.payment_status}', expected 'refunded'.",
+                    )
+
+            # Verification for escalate_support_case
+            elif tool_id == "escalate_support_case":
+                case_id = data.get("case_id")
+                if not case_id:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="existence_check",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="Support escalation verification failed: missing case_id.",
+                    )
+                persisted_case = await ds.get_support_case(case_id)
+                if not persisted_case:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="existence_check",
+                        recommended_status=TaskStatus.FAILED,
+                        summary=f"Support escalation verification failed: Case '{case_id}' was not persisted.",
+                    )
+                return VerificationResult(
+                    verified=True,
+                    verification_type="escalation_review",
+                    recommended_status=TaskStatus.ESCALATED,
+                    requires_human_review=True,
+                    summary=f"Support case escalated to tier-2 human supervisor: {data.get('reason')}",
+                    details=data,
+                )
+
+            # Verification for prepare_customer_response
+            elif tool_id == "prepare_customer_response":
+                cust_resp = data.get("customer_response")
+                if not cust_resp:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="response_check",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="Customer response verification failed: empty response content.",
+                    )
+
         # 2. Check for Operational / Customer Escalation Flags
         for res in completed_tool_results:
             data = res.get("data") or {}

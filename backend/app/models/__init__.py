@@ -2,6 +2,16 @@ from .task import Task, TaskStatus, AgentType, ExecutionEvent
 from .plan import AgentCapability, PlanStep, StructuredTaskPlan, TaskPlan
 from .business import Customer, OrderTransaction, Lead, ActivityRecord
 from .approval import RiskLevel, ApprovalStatus, ApprovalRecord
+from .support import (
+    SupportIntent,
+    SupportSeverity,
+    SupportCaseStatus,
+    ReviewSentiment,
+    ResponseStrategy,
+    SupportIntentClassification,
+    CustomerReviewAnalysis,
+    SupportCase,
+)
 
 __all__ = [
     "Task",
@@ -19,4 +29,13 @@ __all__ = [
     "RiskLevel",
     "ApprovalStatus",
     "ApprovalRecord",
+    "SupportIntent",
+    "SupportSeverity",
+    "SupportCaseStatus",
+    "ReviewSentiment",
+    "ResponseStrategy",
+    "SupportIntentClassification",
+    "CustomerReviewAnalysis",
+    "SupportCase",
 ]
+

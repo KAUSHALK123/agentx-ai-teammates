@@ -26,6 +26,11 @@ from .approval import (
     ApprovalRejectRequest,
     ApprovalDecisionResponse,
 )
+from .support import (
+    SupportAnalyzeRequest,
+    SupportAnalyzeResponse,
+    SupportCaseResponse,
+)
 
 __all__ = [
     "TaskCreateRequest",
@@ -46,4 +51,8 @@ __all__ = [
     "ApprovalResponse",
     "ApprovalRejectRequest",
     "ApprovalDecisionResponse",
+    "SupportAnalyzeRequest",
+    "SupportAnalyzeResponse",
+    "SupportCaseResponse",
 ]
+
