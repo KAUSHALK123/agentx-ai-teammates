@@ -10,7 +10,8 @@ export type NavTab =
   | 'task-history' 
   | 'integrations' 
   | 'analytics' 
-  | 'settings';
+  | 'settings'
+  | 'inputs';
 
 export type AgentRole = 'support' | 'sales' | 'operations';
 

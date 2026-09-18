@@ -11,7 +11,8 @@ import {
   BarChart3, 
   Settings, 
   LogOut,
-  ShieldAlert
+  ShieldAlert,
+  UploadCloud
 } from 'lucide-react';
 import type { NavTab } from '../../types';
 
@@ -29,6 +30,7 @@ export const Sidebar: React.FC = () => {
   ];
 
   const ecosystemNav: { id: NavTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'inputs', label: 'Multimodal Inputs', icon: <UploadCloud className="w-5 h-5" /> },
     { id: 'integrations', label: 'Integrations', icon: <Layers className="w-5 h-5" /> },
     { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="w-5 h-5" /> },
     { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
