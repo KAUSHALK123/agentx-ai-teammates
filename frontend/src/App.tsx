@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { SearchModal } from './components/layout/SearchModal';
 import { ApprovalModal } from './components/layout/ApprovalModal';
+import { GothicGateEntrance } from './components/ui/GothicGateEntrance';
 
 // Views
 import { WelcomeView } from './components/views/WelcomeView';
@@ -20,10 +21,49 @@ import { AnalyticsView } from './components/views/AnalyticsView';
 import { SettingsView } from './components/views/SettingsView';
 
 const MainContent: React.FC = () => {
-  const { activeTab } = useApp();
+  const { activeTab, setActiveTab } = useApp();
+  const [showGothicEntrance, setShowGothicEntrance] = useState<boolean>(false);
+
+  // Show gothic entrance on first visit or when requested
+  useEffect(() => {
+    const hasOpened = sessionStorage.getItem('agentx_gate_opened');
+    if (!hasOpened) {
+      setShowGothicEntrance(true);
+    }
+  }, []);
+
+  // Listen for custom replay event from sidebar/welcome view
+  useEffect(() => {
+    const handleReplay = () => setShowGothicEntrance(true);
+    window.addEventListener('replay-gothic-entrance', handleReplay);
+    return () => window.removeEventListener('replay-gothic-entrance', handleReplay);
+  }, []);
+
+  if (showGothicEntrance) {
+    return (
+      <GothicGateEntrance 
+        onEnterComplete={() => {
+          setShowGothicEntrance(false);
+          setActiveTab('dashboard');
+        }} 
+      />
+    );
+  }
 
   if (activeTab === 'welcome') {
-    return <WelcomeView />;
+    return (
+      <>
+        <WelcomeView />
+        {/* Option to view entrance again */}
+        <button
+          onClick={() => setShowGothicEntrance(true)}
+          className="fixed bottom-4 right-4 z-40 px-4 py-2 bg-[#0d0306] hover:bg-black text-red-400 border border-red-900 rounded-xl text-xs font-bold shadow-2xl transition-all flex items-center gap-2 cursor-pointer"
+          style={{ fontFamily: "'Cinzel', serif" }}
+        >
+          <span>🏰 Replay Gate Entrance</span>
+        </button>
+      </>
+    );
   }
 
   return (
