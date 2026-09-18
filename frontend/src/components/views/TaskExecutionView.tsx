@@ -33,11 +33,36 @@ export const TaskExecutionView: React.FC = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
 
-  const task = tasks.find(t => t.id === selectedTaskId) || tasks[0];
+  const task = (tasks || []).find(t => t.id === selectedTaskId) || (tasks && tasks.length > 0 ? tasks[0] : null);
 
-  if (!task) return null;
+  if (!task) {
+    return (
+      <div className="p-8 max-w-xl mx-auto glass-card rounded-2xl border border-slate-200 text-center space-y-4 my-12">
+        <Bot className="w-12 h-12 text-slate-400 mx-auto" />
+        <h3 className="text-lg font-bold text-slate-900">No Task Selected</h3>
+        <p className="text-xs text-slate-500 max-w-md mx-auto">
+          No autonomous task is currently selected. Dispatch a new task or browse task history to inspect real-time execution logs.
+        </p>
+        <div className="flex justify-center gap-3 pt-2">
+          <button
+            onClick={() => setActiveTab('create-task')}
+            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+          >
+            Create New Task
+          </button>
+          <button
+            onClick={() => setActiveTab('task-history')}
+            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold border border-slate-200 transition-all cursor-pointer"
+          >
+            View Task History
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  const currentStep = task.steps.find(s => s.status === 'IN_PROGRESS') || task.steps[task.currentStepIndex - 1] || task.steps[0];
+  const stepsList = task.steps || [];
+  const currentStep = stepsList.find(s => s.status === 'IN_PROGRESS') || stepsList[task.currentStepIndex - 1] || stepsList[0];
   const isWaitingApproval = task.status === 'WAITING_FOR_APPROVAL' && task.approvalRequest;
 
   const toggleExpand = (id: string) => {
@@ -206,14 +231,14 @@ export const TaskExecutionView: React.FC = () => {
             <span>Execution Progress & Current Action</span>
           </h3>
           <span className="text-xs font-mono font-bold text-slate-500">
-            Step {task.currentStepIndex} of {task.steps.length}
+            Step {task.currentStepIndex || 1} of {stepsList.length || 1}
           </span>
         </div>
 
         <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200">
           <div
             className="bg-gradient-to-r from-indigo-600 via-purple-600 to-emerald-500 h-full transition-all duration-500"
-            style={{ width: `${(task.currentStepIndex / task.steps.length) * 100}%` }}
+            style={{ width: `${stepsList.length > 0 ? Math.min(100, ((task.currentStepIndex || 1) / stepsList.length) * 100) : 0}%` }}
           ></div>
         </div>
 
@@ -245,7 +270,7 @@ export const TaskExecutionView: React.FC = () => {
         </div>
 
         <div className="space-y-4 relative before:absolute before:left-4 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
-          {task.steps.map((step) => {
+          {stepsList.map((step) => {
             const isDone = step.status === 'COMPLETED';
             const isInProgress = step.status === 'IN_PROGRESS';
             const isWaiting = step.status === 'WAITING';
