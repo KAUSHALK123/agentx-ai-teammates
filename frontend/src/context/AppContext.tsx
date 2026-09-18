@@ -208,10 +208,62 @@ function transformExecutionSteps(exec: TaskExecutionDetailResponse): ExecutionSt
   });
 }
 
+function parseRouteFromUrl(): { tab: NavTab; agentRole?: AgentRole; taskId?: string } | null {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash.replace(/^#\/?/, '').trim();
+  const path = window.location.pathname.replace(/^\//, '').trim();
+  const routeStr = hash || path;
+
+  if (!routeStr) return null;
+
+  const parts = routeStr.split('/').filter(Boolean);
+  const primary = parts[0]?.toLowerCase();
+  const secondary = parts[1];
+
+  if (primary === 'agents' || primary === 'agent') {
+    if (secondary && ['support', 'sales', 'operations'].includes(secondary.toLowerCase())) {
+      return { tab: 'agent-detail', agentRole: secondary.toLowerCase() as AgentRole };
+    }
+    return { tab: 'agents' };
+  }
+
+  if (primary === 'agent-detail') {
+    if (secondary && ['support', 'sales', 'operations'].includes(secondary.toLowerCase())) {
+      return { tab: 'agent-detail', agentRole: secondary.toLowerCase() as AgentRole };
+    }
+    return { tab: 'agent-detail' };
+  }
+
+  if (primary === 'tasks' || primary === 'task' || primary === 'task-execution') {
+    return { tab: 'task-execution', taskId: secondary };
+  }
+
+  const validTabs: NavTab[] = [
+    'welcome', 'dashboard', 'agents', 'agent-detail', 'create-task', 
+    'task-execution', 'approvals', 'support-review', 'task-history', 
+    'integrations', 'analytics', 'settings', 'inputs'
+  ];
+
+  if (validTabs.includes(primary as NavTab)) {
+    return { tab: primary as NavTab };
+  }
+
+  return null;
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [activeTab, setActiveTab] = useState<NavTab>('welcome');
-  const [selectedAgentRole, setSelectedAgentRole] = useState<AgentRole>('support');
-  const [selectedTaskId, setSelectedTaskId] = useState<string>('TASK-9042');
+  const initialRoute = parseRouteFromUrl();
+  const [activeTab, setActiveTabState] = useState<NavTab>(() => {
+    if (initialRoute?.tab) return initialRoute.tab;
+    const hasOpened = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('agentx_gate_opened') : null;
+    return hasOpened ? 'dashboard' : 'welcome';
+  });
+  const [selectedAgentRole, setSelectedAgentRoleState] = useState<AgentRole>(
+    initialRoute?.agentRole || 'support'
+  );
+  const [selectedTaskId, setSelectedTaskIdState] = useState<string>(
+    initialRoute?.taskId || 'TASK-9042'
+  );
   const [tasks, setTasks] = useState<TaskItem[]>(INITIAL_TASKS);
   const [agents, setAgents] = useState<Record<string, AgentInfo>>(INITIAL_AGENTS);
   const [integrations, setIntegrations] = useState<ToolIntegration[]>(INITIAL_INTEGRATIONS);
@@ -219,6 +271,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
   const [workspace, setWorkspace] = useState<string>('Acme Corp - Global Operations');
   const [isBackendConnected, setIsBackendConnected] = useState<boolean>(false);
+
+  const setActiveTab = (tab: NavTab) => {
+    setActiveTabState(tab);
+    if (typeof window !== 'undefined') {
+      if (tab === 'agent-detail') {
+        window.location.hash = `#/agents/${selectedAgentRole}`;
+      } else if (tab === 'task-execution') {
+        window.location.hash = `#/tasks/${selectedTaskId}`;
+      } else {
+        window.location.hash = `#/${tab}`;
+      }
+    }
+  };
+
+  const setSelectedAgentRole = (role: AgentRole) => {
+    setSelectedAgentRoleState(role);
+    if (typeof window !== 'undefined' && activeTab === 'agent-detail') {
+      window.location.hash = `#/agents/${role}`;
+    }
+  };
+
+  const setSelectedTaskId = (id: string) => {
+    setSelectedTaskIdState(id);
+    if (typeof window !== 'undefined' && activeTab === 'task-execution') {
+      window.location.hash = `#/tasks/${id}`;
+    }
+  };
+
+  // Listen to browser navigation (back/forward or manual hash change)
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const parsed = parseRouteFromUrl();
+      if (parsed) {
+        if (parsed.tab) setActiveTabState(parsed.tab);
+        if (parsed.agentRole) setSelectedAgentRoleState(parsed.agentRole);
+        if (parsed.taskId) setSelectedTaskIdState(parsed.taskId);
+      }
+    };
+
+    window.addEventListener('hashchange', handleUrlChange);
+    window.addEventListener('popstate', handleUrlChange);
+    return () => {
+      window.removeEventListener('hashchange', handleUrlChange);
+      window.removeEventListener('popstate', handleUrlChange);
+    };
+  }, []);
 
   // Dynamic analytics computed from real tasks
   const analytics = useMemo<AnalyticsMetrics>(() => {
@@ -292,17 +390,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             backendAgents.forEach(ba => {
               const role = ba.agent_id as AgentRole;
               if (updated[role]) {
+                const normalizedCaps: string[] = (ba.capabilities && Array.isArray(ba.capabilities))
+                  ? ba.capabilities.map((c: any) => {
+                      if (typeof c === 'string') return c;
+                      if (c && typeof c === 'object') {
+                        const capName = (c.name || 'Capability').replace(/_/g, ' ');
+                        return c.description ? `${capName} — ${c.description}` : capName;
+                      }
+                      return String(c);
+                    })
+                  : updated[role].capabilities;
+
+                const normalizedTools = (ba.available_tools && Array.isArray(ba.available_tools))
+                  ? ba.available_tools.map((toolItem: any) => {
+                      const toolName = typeof toolItem === 'string' ? toolItem : toolItem?.name || 'Tool';
+                      return {
+                        name: toolName,
+                        category: role,
+                        icon: 'Wrench',
+                        status: 'Active' as const
+                      };
+                    })
+                  : updated[role].tools;
+
                 updated[role] = {
                   ...updated[role],
-                  name: ba.name,
-                  description: ba.description,
-                  capabilities: ba.capabilities || updated[role].capabilities,
-                  tools: ba.available_tools ? ba.available_tools.map(toolName => ({
-                    name: toolName,
-                    category: role,
-                    icon: 'Wrench',
-                    status: 'Active'
-                  })) : updated[role].tools
+                  name: ba.name || updated[role].name,
+                  description: ba.description || updated[role].description,
+                  capabilities: normalizedCaps && normalizedCaps.length > 0 ? normalizedCaps : updated[role].capabilities,
+                  tools: normalizedTools && normalizedTools.length > 0 ? normalizedTools : updated[role].tools
                 };
               }
             });

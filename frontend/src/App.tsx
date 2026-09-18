@@ -5,6 +5,7 @@ import { Header } from './components/layout/Header';
 import { SearchModal } from './components/layout/SearchModal';
 import { ApprovalModal } from './components/layout/ApprovalModal';
 import { GothicGateEntrance } from './components/ui/GothicGateEntrance';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
 // Views
 import { WelcomeView } from './components/views/WelcomeView';
@@ -16,6 +17,7 @@ import { TaskExecutionView } from './components/views/TaskExecutionView';
 import { HumanApprovalView } from './components/views/HumanApprovalView';
 import { SupportReviewView } from './components/views/SupportReviewView';
 import { TaskHistoryView } from './components/views/TaskHistoryView';
+import { InputsView } from './components/views/InputsView';
 import { IntegrationsView } from './components/views/IntegrationsView';
 import { AnalyticsView } from './components/views/AnalyticsView';
 import { SettingsView } from './components/views/SettingsView';
@@ -24,11 +26,17 @@ const MainContent: React.FC = () => {
   const { activeTab, setActiveTab } = useApp();
   const [showGothicEntrance, setShowGothicEntrance] = useState<boolean>(false);
 
-  // Show gothic entrance on first visit or when requested
+  // Check initial route to respect direct deep-linking
   useEffect(() => {
+    const hash = window.location.hash.replace(/^#\/?/, '').trim();
+    const path = window.location.pathname.replace(/^\//, '').trim();
+    const hasDeepLink = Boolean(hash || (path && path !== 'welcome'));
+
     const hasOpened = sessionStorage.getItem('agentx_gate_opened');
-    if (!hasOpened) {
+    if (!hasOpened && !hasDeepLink) {
       setShowGothicEntrance(true);
+    } else if (hasDeepLink) {
+      sessionStorage.setItem('agentx_gate_opened', 'true');
     }
   }, []);
 
@@ -44,7 +52,9 @@ const MainContent: React.FC = () => {
       <GothicGateEntrance 
         onEnterComplete={() => {
           setShowGothicEntrance(false);
-          setActiveTab('dashboard');
+          if (activeTab === 'welcome') {
+            setActiveTab('dashboard');
+          }
         }} 
       />
     );
@@ -52,7 +62,7 @@ const MainContent: React.FC = () => {
 
   if (activeTab === 'welcome') {
     return (
-      <>
+      <ErrorBoundary fallbackTitle="Welcome View Error">
         <WelcomeView />
         {/* Option to view entrance again */}
         <button
@@ -62,9 +72,15 @@ const MainContent: React.FC = () => {
         >
           <span>🏰 Replay Gate Entrance</span>
         </button>
-      </>
+      </ErrorBoundary>
     );
   }
+
+  const knownTabs = [
+    'dashboard', 'agents', 'agent-detail', 'create-task', 
+    'task-execution', 'approvals', 'support-review', 'task-history', 
+    'inputs', 'integrations', 'analytics', 'settings'
+  ];
 
   return (
     <div className="flex min-h-screen relative overflow-x-hidden text-slate-800">
@@ -79,17 +95,23 @@ const MainContent: React.FC = () => {
       <div className="flex-1 ml-72 min-w-0 flex flex-col min-h-screen">
         <Header />
         <main className="flex-1 p-10 space-y-10">
-          {activeTab === 'dashboard' && <DashboardView />}
-          {activeTab === 'agents' && <AgentsView />}
-          {activeTab === 'agent-detail' && <AgentDetailView />}
-          {activeTab === 'create-task' && <CreateTaskView />}
-          {activeTab === 'task-execution' && <TaskExecutionView />}
-          {activeTab === 'approvals' && <HumanApprovalView />}
-          {activeTab === 'support-review' && <SupportReviewView />}
-          {activeTab === 'task-history' && <TaskHistoryView />}
-          {activeTab === 'integrations' && <IntegrationsView />}
-          {activeTab === 'analytics' && <AnalyticsView />}
-          {activeTab === 'settings' && <SettingsView />}
+          <ErrorBoundary fallbackTitle="View Display Error">
+            {activeTab === 'dashboard' && <DashboardView />}
+            {activeTab === 'agents' && <AgentsView />}
+            {activeTab === 'agent-detail' && <AgentDetailView />}
+            {activeTab === 'create-task' && <CreateTaskView />}
+            {activeTab === 'task-execution' && <TaskExecutionView />}
+            {activeTab === 'approvals' && <HumanApprovalView />}
+            {activeTab === 'support-review' && <SupportReviewView />}
+            {activeTab === 'task-history' && <TaskHistoryView />}
+            {activeTab === 'inputs' && <InputsView />}
+            {activeTab === 'integrations' && <IntegrationsView />}
+            {activeTab === 'analytics' && <AnalyticsView />}
+            {activeTab === 'settings' && <SettingsView />}
+
+            {/* Safe fallback if route is unrecognized */}
+            {!knownTabs.includes(activeTab) && <DashboardView />}
+          </ErrorBoundary>
         </main>
       </div>
 
@@ -101,8 +123,10 @@ const MainContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AppProvider>
-      <MainContent />
-    </AppProvider>
+    <ErrorBoundary fallbackTitle="AgentX System Runtime Error">
+      <AppProvider>
+        <MainContent />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }
