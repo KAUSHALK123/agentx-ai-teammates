@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.agents.router import AgentRouter
 from app.models.approval import ApprovalStatus
+from app.models.user import User
+from app.models.workspace import Workspace
 from app.schemas.approval import (
     ApprovalDecisionResponse,
     ApprovalRejectRequest,
@@ -12,6 +14,7 @@ from app.schemas.approval import (
 from app.services.approval_store import get_approval_store
 from app.services.execution_engine import get_execution_engine
 from app.services.task_store import get_task_store
+from app.services.auth_service import get_current_user, get_current_workspace, verify_workspace_access, verify_approval_access
 
 router = APIRouter()
 _router_instance = AgentRouter()
@@ -25,8 +28,11 @@ _router_instance = AgentRouter()
 async def list_approvals(
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by approval status (PENDING, APPROVED, REJECTED)"),
     task_id: Optional[str] = Query(None, description="Filter by task ID"),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
 ) -> List[ApprovalResponse]:
-    """Retrieve all approval requests with optional status and task filtering."""
+    """Retrieve all approval requests in workspace accessible to user."""
+    await verify_workspace_access(current_user.id, workspace.id)
     store = get_approval_store()
     st = None
     if status_filter:
@@ -37,7 +43,14 @@ async def list_approvals(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid status filter '{status_filter}'. Allowed: PENDING, APPROVED, REJECTED, EXPIRED",
             )
+
     records = await store.list_approvals(status=st, task_id=task_id)
+    filtered = []
+    for r in records:
+        if getattr(r, "workspace_id", None) and r.workspace_id != workspace.id:
+            continue
+        filtered.append(r)
+
     return [
         ApprovalResponse(
             approval_id=r.approval_id,
@@ -55,7 +68,7 @@ async def list_approvals(
             resolved_by=r.resolved_by,
             rejection_reason=r.rejection_reason,
         )
-        for r in records
+        for r in filtered
     ]
 
 
@@ -64,10 +77,16 @@ async def list_approvals(
     response_model=List[ApprovalResponse],
     summary="List pending approval requests",
 )
-async def list_pending_approvals() -> List[ApprovalResponse]:
-    """Retrieve all pending approval requests awaiting human intervention."""
+async def list_pending_approvals(
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
+) -> List[ApprovalResponse]:
+    """Retrieve all pending approval requests in active workspace."""
+    await verify_workspace_access(current_user.id, workspace.id)
     store = get_approval_store()
     records = await store.list_approvals(status=ApprovalStatus.PENDING)
+    filtered = [r for r in records if getattr(r, "workspace_id", None) == workspace.id or not getattr(r, "workspace_id", None)]
+
     return [
         ApprovalResponse(
             approval_id=r.approval_id,
@@ -85,7 +104,7 @@ async def list_pending_approvals() -> List[ApprovalResponse]:
             resolved_by=r.resolved_by,
             rejection_reason=r.rejection_reason,
         )
-        for r in records
+        for r in filtered
     ]
 
 
@@ -94,10 +113,16 @@ async def list_pending_approvals() -> List[ApprovalResponse]:
     response_model=List[ApprovalResponse],
     summary="List approvals for a specific task",
 )
-async def list_task_approvals(task_id: str) -> List[ApprovalResponse]:
+async def list_task_approvals(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
+) -> List[ApprovalResponse]:
     """Retrieve all approval requests associated with a specific task."""
+    await verify_workspace_access(current_user.id, workspace.id)
     store = get_approval_store()
     records = await store.list_approvals(task_id=task_id)
+
     return [
         ApprovalResponse(
             approval_id=r.approval_id,
@@ -124,7 +149,11 @@ async def list_task_approvals(task_id: str) -> List[ApprovalResponse]:
     response_model=ApprovalResponse,
     summary="Retrieve an approval request by ID",
 )
-async def get_approval_by_id(approval_id: str) -> ApprovalResponse:
+async def get_approval_by_id(
+    approval_id: str,
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
+) -> ApprovalResponse:
     """Fetch details and current state for a specific approval record."""
     store = get_approval_store()
     appr = await store.get_approval(approval_id)
@@ -133,6 +162,9 @@ async def get_approval_by_id(approval_id: str) -> ApprovalResponse:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Approval with ID '{approval_id}' not found",
         )
+
+    await verify_approval_access(current_user.id, appr, workspace.id)
+
     return ApprovalResponse(
         approval_id=appr.approval_id,
         task_id=appr.task_id,
@@ -159,6 +191,8 @@ async def get_approval_by_id(approval_id: str) -> ApprovalResponse:
 async def approve_action(
     approval_id: str,
     resolved_by: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
 ) -> ApprovalDecisionResponse:
     """Approve a pending high-risk action and immediately resume task execution."""
     approval_store = get_approval_store()
@@ -169,6 +203,8 @@ async def approve_action(
             detail=f"Approval with ID '{approval_id}' not found",
         )
 
+    await verify_approval_access(current_user.id, appr, workspace.id)
+
     if appr.status != ApprovalStatus.PENDING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -178,7 +214,7 @@ async def approve_action(
     # 1. Update Approval Record
     appr.status = ApprovalStatus.APPROVED
     appr.resolved_at = datetime.now(timezone.utc)
-    appr.resolved_by = resolved_by or "human_operator"
+    appr.resolved_by = current_user.id
     await approval_store.update_approval(appr)
 
     # 2. Fetch Task and Resume Execution
@@ -221,6 +257,8 @@ async def reject_action(
     approval_id: str,
     payload: Optional[ApprovalRejectRequest] = None,
     resolved_by: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
 ) -> ApprovalDecisionResponse:
     """Reject a proposed high-risk action, preventing execution and stopping the task."""
     approval_store = get_approval_store()
@@ -230,6 +268,8 @@ async def reject_action(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Approval with ID '{approval_id}' not found",
         )
+
+    await verify_approval_access(current_user.id, appr, workspace.id)
 
     if appr.status != ApprovalStatus.PENDING:
         raise HTTPException(
@@ -242,10 +282,9 @@ async def reject_action(
     # 1. Update Approval Record
     appr.status = ApprovalStatus.REJECTED
     appr.resolved_at = datetime.now(timezone.utc)
-    appr.resolved_by = resolved_by or "human_operator"
+    appr.resolved_by = current_user.id
     appr.rejection_reason = rejection_reason
     await approval_store.update_approval(appr)
-
 
     # 2. Fetch Task and Stop Execution
     task_store = get_task_store()
