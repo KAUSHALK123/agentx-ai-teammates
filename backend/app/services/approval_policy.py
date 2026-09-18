@@ -35,6 +35,7 @@ class ApprovalPolicyService:
         "cancel_order",
         "delete_record",
         "apply_discount",
+        "n8n_send_followup",
     }
 
     def evaluate(

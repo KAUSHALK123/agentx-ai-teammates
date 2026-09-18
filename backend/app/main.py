@@ -8,6 +8,7 @@ from app.api.v1.agents import router as agents_router
 from app.api.v1.tools import router as tools_router
 from app.api.v1.approvals import router as approvals_router
 from app.api.v1.support import router as support_router
+from app.api.v1.integrations import router as integrations_router
 from app.api.v1 import api_v1_router
 from app.config.settings import get_settings
 
@@ -52,6 +53,7 @@ app.include_router(agents_router, prefix="/agents", tags=["Agents"])
 app.include_router(tools_router, prefix="/tools", tags=["Tools"])
 app.include_router(approvals_router, prefix="/approvals", tags=["Approvals"])
 app.include_router(support_router, prefix="/support", tags=["Support"])
+app.include_router(integrations_router, prefix="/integrations", tags=["Integrations"])
 
 # Also mount under /api/v1 prefix
 app.include_router(api_v1_router, prefix="/api/v1")

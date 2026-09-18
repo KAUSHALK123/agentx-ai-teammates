@@ -158,6 +158,48 @@ class TaskVerifier:
                         summary="Customer response verification failed: empty response content.",
                     )
 
+            # Verification for n8n_process_lead
+            elif tool_id == "n8n_process_lead":
+                lead_id = data.get("lead_id")
+                expected_status = data.get("lead_status")
+                qualification = data.get("qualification") or {}
+                if not lead_id or not expected_status:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="n8n_lead_qualification",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="n8n lead processing verification failed: missing lead_id or lead_status.",
+                    )
+                # Confirm CRM database reflects the status
+                persisted_lead = await ds.get_lead(lead_id)
+                if not persisted_lead:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="n8n_lead_qualification",
+                        recommended_status=TaskStatus.FAILED,
+                        summary=f"n8n lead verification failed: Lead '{lead_id}' not found in database.",
+                    )
+                if persisted_lead.status != expected_status:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="n8n_lead_qualification",
+                        recommended_status=TaskStatus.FAILED,
+                        summary=f"n8n lead status mismatch: expected '{expected_status}', found '{persisted_lead.status}'",
+                        details={"expected": expected_status, "actual": persisted_lead.status},
+                    )
+
+            # Verification for n8n_send_followup
+            elif tool_id == "n8n_send_followup":
+                delivery = data.get("delivery_info") or {}
+                if delivery.get("status") != "delivered":
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="n8n_communication_dispatch",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="n8n follow-up verification failed: message status is not 'delivered'.",
+                        details=data,
+                    )
+
         # 2. Check for Operational / Customer Escalation Flags
         for res in completed_tool_results:
             data = res.get("data") or {}

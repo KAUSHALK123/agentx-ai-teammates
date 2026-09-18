@@ -528,6 +528,10 @@ def initialize_default_tools() -> None:
         IssueDemoRefundTool,
         EscalateSupportCaseTool,
     )
+    from app.tools.n8n_tools import (
+        N8nProcessLeadTool,
+        N8nSendFollowupTool,
+    )
     registry = get_tool_registry()
     tools = [
         LookupCustomerTool(),
@@ -541,6 +545,8 @@ def initialize_default_tools() -> None:
         PrepareCustomerResponseTool(),
         IssueDemoRefundTool(),
         EscalateSupportCaseTool(),
+        N8nProcessLeadTool(),
+        N8nSendFollowupTool(),
     ]
     for tool in tools:
         if not registry.has_tool(tool.tool_id):

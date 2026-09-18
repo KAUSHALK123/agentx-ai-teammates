@@ -35,6 +35,15 @@ def normalize_transaction_id(tid: str) -> str:
     return clean
 
 
+def normalize_lead_id(lid: str) -> str:
+    """Normalize identifiers like L001, L1, LEAD1 into standard LEAD-001."""
+    clean = lid.strip().upper()
+    m = re.match(r"^(?:LEAD-?|L)0*(\d+)$", clean)
+    if m:
+        return f"LEAD-{int(m.group(1)):03d}"
+    return clean
+
+
 class IDataService(ABC):
     """Abstract interface defining business data interactions.
     
@@ -293,16 +302,20 @@ class DemoDataService(IDataService):
             return None
 
     async def get_lead(self, lead_id: str) -> Optional[Lead]:
+        norm_id = normalize_lead_id(lead_id)
+        raw_id = lead_id.strip().upper()
         async with self._lock:
-            lead = self._leads.get(lead_id.strip().upper())
+            lead = self._leads.get(norm_id) or self._leads.get(raw_id)
             return lead.model_copy() if lead else None
 
     async def find_lead(self, query: str) -> Optional[Lead]:
         q = query.strip().lower()
+        norm_id = normalize_lead_id(query).lower()
         async with self._lock:
             for lead in self._leads.values():
                 if (
                     lead.lead_id.lower() == q
+                    or lead.lead_id.lower() == norm_id
                     or q in lead.company.lower()
                     or q in lead.email.lower()
                     or q in lead.name.lower()
@@ -316,9 +329,10 @@ class DemoDataService(IDataService):
         status: Optional[str] = None,
         notes: Optional[str] = None,
     ) -> Optional[Lead]:
-        lid = lead_id.strip().upper()
+        norm_id = normalize_lead_id(lead_id)
+        raw_id = lead_id.strip().upper()
         async with self._lock:
-            lead = self._leads.get(lid)
+            lead = self._leads.get(norm_id) or self._leads.get(raw_id)
             if not lead:
                 return None
             if status:

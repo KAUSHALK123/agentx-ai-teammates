@@ -235,7 +235,7 @@ class TaskExecutionEngine:
                         "status": TaskStatus.WAITING_FOR_APPROVAL.value,
                         "summary": f"Execution paused. Action '{step.action}' requires human approval ({decision.risk_level.value} risk).",
                         "approval": approval_record.model_dump(),
-                        "customer": parameters.get("customer_id") or context.variables.get("customer_id") or "CUST-001",
+                        "customer": parameters.get("lead_id") or context.variables.get("lead_id") or parameters.get("customer_id") or context.variables.get("customer_id") or "CUST-001",
                         "issue": context.variables.get("issue_summary") or task.user_request,
                         "proposed_action": step.action,
                         "amount": parameters.get("amount") or context.variables.get("amount"),
@@ -437,13 +437,17 @@ class TaskExecutionEngine:
             num = ord_match.group(1) or ord_match.group(2)
             ctx.variables["order_id"] = f"ORD-{num}"
 
-        # Lead ID patterns: LEAD-101, L001, L101
+        # Lead ID patterns: LEAD-101, LEAD-001, L001, L101
         lead_match = re.search(r"\b(?:LEAD-0*(\d+)|L0*(\d+))\b", req, re.IGNORECASE)
         if lead_match:
             num = lead_match.group(1) or lead_match.group(2)
-            # Map L001 -> LEAD-101 (demo lead) or LEAD-{num}
             lead_num = int(num)
-            ctx.variables["lead_id"] = "LEAD-101" if lead_num == 1 else f"LEAD-{lead_num:03d}"
+            if "001" in req or "L001" in req.upper():
+                ctx.variables["lead_id"] = "LEAD-001"
+            elif lead_num in (1, 101):
+                ctx.variables["lead_id"] = "LEAD-101"
+            else:
+                ctx.variables["lead_id"] = f"LEAD-{lead_num:03d}"
 
         # Transaction ID patterns: TXN-5001, T5001
         txn_match = re.search(r"\b(?:TXN-?0*(\d+)|T0*(\d+))\b", req, re.IGNORECASE)
@@ -568,9 +572,28 @@ class TaskExecutionEngine:
             lid = params.get("lead_id") or context.variables.get("lead_id") or "LEAD-101"
             params["lead_id"] = lid
             if "status" not in params:
-                params["status"] = "qualified"
+                params["status"] = context.variables.get("lead_status") or "qualified"
             if "notes" not in params:
                 params["notes"] = f"Processed and qualified by Sales Teammate for task {context.task_id}"
+
+        elif tool_id == "n8n_process_lead":
+            lid = params.get("lead_id") or context.variables.get("lead_id") or "LEAD-001"
+            params["lead_id"] = lid
+            params["task_id"] = context.task_id
+            if "context" not in params:
+                ctx_payload = {}
+                for k in ["name", "email", "company", "source", "notes"]:
+                    if k in context.variables:
+                        ctx_payload[k] = context.variables[k]
+                params["context"] = ctx_payload
+
+        elif tool_id == "n8n_send_followup":
+            lid = params.get("lead_id") or context.variables.get("lead_id") or "LEAD-001"
+            params["lead_id"] = lid
+            params["task_id"] = context.task_id
+            if "follow_up" not in params:
+                follow_up = context.variables.get("follow_up") or {}
+                params["follow_up"] = follow_up
 
         elif tool_id == "get_business_data":
             if "metric_type" not in params:
@@ -688,6 +711,34 @@ class TaskExecutionEngine:
         elif tool_id == "lookup_lead":
             if data.get("lead_id"):
                 context.variables["lead_id"] = data["lead_id"]
+            if data.get("name"):
+                context.variables["name"] = data["name"]
+            if data.get("email"):
+                context.variables["email"] = data["email"]
+            if data.get("company"):
+                context.variables["company"] = data["company"]
+            if data.get("source"):
+                context.variables["source"] = data["source"]
+            if data.get("notes"):
+                context.variables["notes"] = data["notes"]
+            if data.get("status"):
+                context.variables["lead_status"] = data["status"]
+
+        elif tool_id == "n8n_process_lead":
+            if data.get("lead_id"):
+                context.variables["lead_id"] = data["lead_id"]
+            if data.get("lead_status"):
+                context.variables["lead_status"] = data["lead_status"]
+            if data.get("qualification"):
+                context.variables["qualification"] = data["qualification"]
+            if data.get("follow_up"):
+                context.variables["follow_up"] = data["follow_up"]
+            context.variables["proposed_resolution"] = f"Lead {data.get('lead_id')} qualified via n8n"
+
+        elif tool_id == "n8n_send_followup":
+            if data.get("delivery_info"):
+                context.variables["delivery_info"] = data["delivery_info"]
+            context.variables["proposed_resolution"] = "Follow-up outreach dispatched via n8n"
 
         elif tool_id == "update_lead":
             if data.get("lead_id"):

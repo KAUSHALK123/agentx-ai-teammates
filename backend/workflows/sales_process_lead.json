@@ -1,0 +1,47 @@
+[
+  {
+    "name": "AgentX - Sales Process Lead",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "agentx-sales-process-lead",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "wh-sales-process-lead",
+        "name": "Webhook Trigger",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [220, 300],
+        "webhookId": "agentx-sales-process-lead-hook"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $input.item.json.body || $input.item.json;\nconst leadId = body.lead_id || 'LEAD-001';\nconst ctx = body.context || {};\nconst leadName = ctx.lead_name || ctx.name || 'Valued Prospect';\nconst company = ctx.company || 'Enterprise Partner';\nconst source = ctx.source || 'inbound_enterprise';\nconst notes = ctx.notes || '';\n\n// Qualification logic\nconst isEnterprise = source.includes('enterprise') || notes.toLowerCase().includes('500 seat') || notes.toLowerCase().includes('enterprise');\nconst score = isEnterprise ? 88 : 70;\nconst tier = isEnterprise ? 'TIER_1_ENTERPRISE' : 'TIER_2_GROWTH';\nconst qualificationStatus = 'qualified';\nconst rationale = isEnterprise ? 'High-value enterprise prospect with 500+ seat potential' : 'Active commercial interest with growth potential';\n\nconst subject = `Tailored Enterprise Solution for ${company}`;\nconst message = `Hello ${leadName},\\n\\nThank you for reaching out regarding ${company}'s enterprise expansion. We have analyzed your requirements and prepared a tailored commercial proposal.\\n\\nKey Highlights:\\n- Dedicated account architecture\\n- Scalable enterprise tiering\\n- Seamless AgentX autonomous workflow deployment\\n\\nWe look forward to discussing next milestones.\\n\\nBest regards,\\nAgentX Commercial Team`;\n\nreturn [{\n  json: {\n    success: true,\n    workflow: 'sales_process_lead',\n    task_id: body.task_id,\n    lead_id: leadId,\n    lead_status: qualificationStatus,\n    qualification: {\n      score: score,\n      tier: tier,\n      status: qualificationStatus,\n      rationale: rationale\n    },\n    actions: [\n      'Lead context retrieved and validated',\n      `Commercial qualification evaluated (Score: ${score}, ${tier})`,\n      'Lead status updated to QUALIFIED',\n      'Personalized outreach proposal prepared'\n    ],\n    follow_up: {\n      prepared: true,\n      recipient_name: leadName,\n      recipient_email: ctx.email || 'prospect@example.com',\n      subject: subject,\n      message: message\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+        },
+        "id": "code-sales-process-lead",
+        "name": "Process and Qualify Lead",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [460, 300]
+      }
+    ],
+    "connections": {
+      "Webhook Trigger": {
+        "main": [
+          [
+            {
+              "node": "Process and Qualify Lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    }
+  }
+]

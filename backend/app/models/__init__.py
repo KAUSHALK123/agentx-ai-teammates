@@ -12,6 +12,13 @@ from .support import (
     CustomerReviewAnalysis,
     SupportCase,
 )
+from .n8n import (
+    N8nWorkflowDefinition,
+    N8nInvocationPayload,
+    N8nExecutionResult,
+    APPROVED_N8N_WORKFLOWS,
+    get_n8n_workflow_definition,
+)
 
 __all__ = [
     "Task",
@@ -37,5 +44,10 @@ __all__ = [
     "SupportIntentClassification",
     "CustomerReviewAnalysis",
     "SupportCase",
+    "N8nWorkflowDefinition",
+    "N8nInvocationPayload",
+    "N8nExecutionResult",
+    "APPROVED_N8N_WORKFLOWS",
+    "get_n8n_workflow_definition",
 ]
 

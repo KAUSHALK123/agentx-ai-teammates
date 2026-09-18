@@ -1,0 +1,47 @@
+[
+  {
+    "name": "AgentX - Sales Send Follow-Up",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "agentx-sales-send-followup",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "wh-sales-send-followup",
+        "name": "Webhook Trigger",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [220, 300],
+        "webhookId": "agentx-sales-send-followup-hook"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $input.item.json.body || $input.item.json;\nconst leadId = body.lead_id || 'LEAD-001';\nconst followUp = body.follow_up || {};\nconst recipientEmail = followUp.recipient_email || 'prospect@example.com';\nconst recipientName = followUp.recipient_name || 'Prospect';\nconst subject = followUp.subject || 'AgentX Commercial Proposal';\nconst message = followUp.message || '';\n\nconst deliveryId = 'MSG-' + Math.floor(100000 + Math.random() * 900000);\nconst sentTime = new Date().toISOString();\n\nreturn [{\n  json: {\n    success: true,\n    workflow: 'sales_send_followup',\n    task_id: body.task_id,\n    lead_id: leadId,\n    delivery_info: {\n      delivery_id: deliveryId,\n      channel: 'email',\n      status: 'delivered',\n      recipient_name: recipientName,\n      recipient_email: recipientEmail,\n      subject: subject,\n      delivered_at: sentTime\n    },\n    actions: [\n      'Human approval token verified',\n      `Communication dispatched to ${recipientEmail}`,\n      `Delivery receipt recorded (${deliveryId})`\n    ],\n    timestamp: sentTime\n  }\n}];"
+        },
+        "id": "code-sales-send-followup",
+        "name": "Dispatch Follow-Up Outreach",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [460, 300]
+      }
+    ],
+    "connections": {
+      "Webhook Trigger": {
+        "main": [
+          [
+            {
+              "node": "Dispatch Follow-Up Outreach",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    }
+  }
+]

@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     supabase_url: Optional[str] = None
     supabase_key: Optional[str] = None
 
+    # n8n Workflow Integration
+    n8n_base_url: str = "http://localhost:32768"
+    n8n_api_key: Optional[str] = None
+    n8n_webhook_timeout_seconds: float = 10.0
+    n8n_retry_attempts: int = 2
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

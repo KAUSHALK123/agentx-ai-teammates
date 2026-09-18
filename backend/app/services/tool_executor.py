@@ -44,6 +44,8 @@ class ToolExecutionService:
             "lookup_lead",
             "update_lead",
             "create_activity",
+            "n8n_process_lead",
+            "n8n_send_followup",
         },
         AgentType.OPERATIONS.value: {
             "get_business_data",
