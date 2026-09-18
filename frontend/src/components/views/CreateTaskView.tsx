@@ -50,6 +50,14 @@ export const CreateTaskView: React.FC = () => {
     setFiles([{ name: 'cloudcorp_requirements.csv', size: '84 KB', type: 'CSV' }]);
   };
 
+  const handleQuickPromptOperations = () => {
+    setTitle('Audit inventory logs & detect operational discrepancies across warehouse nodes');
+    setDescription('Perform operational data audit on current stock levels, verify inventory records against recent order dispatches, and generate exception report for low-stock items.');
+    setAgentRole('operations');
+    setPriority('HIGH');
+    setFiles([{ name: 'warehouse_inventory_log.csv', size: '142 KB', type: 'CSV' }]);
+  };
+
   const handleToggleVoiceRecord = () => {
     if (!isRecording) {
       setIsRecording(true);
@@ -186,6 +194,12 @@ export const CreateTaskView: React.FC = () => {
               className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition-colors shrink-0"
             >
               Load Sales Lead
+            </button>
+            <button
+              onClick={handleQuickPromptOperations}
+              className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition-colors shrink-0"
+            >
+              Load Operations Audit
             </button>
           </div>
         </div>
