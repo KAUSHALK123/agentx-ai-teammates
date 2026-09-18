@@ -496,7 +496,7 @@ async def test_sales_demo_csv_leads_workflow(tmp_path):
 
     sales_agent = SalesAgent()
     plan = await sales_agent.plan(task.user_request, task_id=task.task_id)
-    assert any("n8n_process_lead" in step.tool_id for step in plan.steps if step.tool_id)
+    assert any(t in step.tool_id for step in plan.steps if step.tool_id for t in ["sales_process_lead", "n8n_process_lead"])
 
     # 3. Execute plan
     engine = TaskExecutionEngine()

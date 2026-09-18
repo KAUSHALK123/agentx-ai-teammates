@@ -655,7 +655,7 @@ class TaskExecutionEngine:
             if "notes" not in params:
                 params["notes"] = f"Processed and qualified by Sales Teammate for task {context.task_id}"
 
-        elif tool_id == "n8n_process_lead":
+        elif tool_id in ["sales_process_lead", "n8n_process_lead"]:
             lid = params.get("lead_id") or context.variables.get("lead_id") or "LEAD-001"
             params["lead_id"] = lid
             params["task_id"] = context.task_id
