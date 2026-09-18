@@ -28,6 +28,22 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      '/inputs': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/support': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/health': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/integrations': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
     }
   }
 })

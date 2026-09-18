@@ -20,26 +20,29 @@ import {
 import type { AgentRole } from '../../types';
 
 export const DashboardView: React.FC = () => {
-  const { setActiveTab, setSelectedAgentRole, setSelectedTaskId, tasks, createNewTask } = useApp();
+  const { 
+    setActiveTab, 
+    setSelectedAgentRole, 
+    setSelectedTaskId, 
+    tasks, 
+    agents, 
+    integrations, 
+    analytics, 
+    createNewTask 
+  } = useApp();
 
   const [chatMessages, setChatMessages] = useState<Array<{ sender: 'ai' | 'user'; text: string; buttons?: string[] }>>([
     {
       sender: 'ai',
-      text: "Good morning, Alex. I've finished auditing the CRM leads. Which agent should handle the follow-up strategy?"
-    },
-    {
-      sender: 'user',
-      text: "Assign the high-value leads to the Growth Engine teammate."
-    },
-    {
-      sender: 'ai',
-      text: "Understood. Setting up an outreach plan for Growth Engine. I also noticed a delayed refund for Customer C-902. Should I initiate a Support audit?",
-      buttons: ['Support Lead', 'Flow Architect']
+      text: "Good morning. AgentX workforce is online. You can type instructions or customer inquiries to dispatch autonomous tasks."
     }
   ]);
 
   const [inputPrompt, setInputPrompt] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+
+  const activeCount = tasks.filter(t => t.status === 'EXECUTING' || t.status === 'WAITING_FOR_APPROVAL').length;
+  const completedCount = tasks.filter(t => t.status === 'COMPLETED').length;
 
   const handleSendPrompt = (textToSend?: string) => {
     const prompt = textToSend || inputPrompt;
@@ -53,7 +56,7 @@ export const DashboardView: React.FC = () => {
     setTimeout(() => {
       createNewTask({
         title: prompt,
-        description: `Triggered via AgentX Command Center: ${prompt}`,
+        description: prompt,
         agentRole: 'auto',
         priority: 'HIGH'
       });
@@ -80,7 +83,7 @@ export const DashboardView: React.FC = () => {
         <div>
           <h1 className="text-4xl font-display font-bold text-slate-900">Workspace Pulse</h1>
           <p className="text-slate-500 mt-2 text-lg">
-            Orchestrating <span className="text-cyan-600 font-bold italic">3 autonomous agents</span> across enterprise tools.
+            Orchestrating <span className="text-cyan-600 font-bold italic">3 autonomous agents</span> across {integrations.length} enterprise tools.
           </p>
         </div>
         <div className="flex gap-3">
@@ -108,7 +111,7 @@ export const DashboardView: React.FC = () => {
               <Zap className="w-5 h-5" />
             </div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active</p>
-            <h3 className="text-xl font-display font-bold text-slate-900 mt-1">08</h3>
+            <h3 className="text-xl font-display font-bold text-slate-900 mt-1">{activeCount.toString().padStart(2, '0')}</h3>
           </div>
 
           <div className="glass-card p-5 rounded-2xl">
@@ -116,7 +119,7 @@ export const DashboardView: React.FC = () => {
               <CheckCircle className="w-5 h-5" />
             </div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Done</p>
-            <h3 className="text-xl font-display font-bold text-slate-900 mt-1">127</h3>
+            <h3 className="text-xl font-display font-bold text-slate-900 mt-1">{completedCount.toString().padStart(2, '0')}</h3>
           </div>
 
           <div className="glass-card p-5 rounded-2xl">
@@ -124,7 +127,7 @@ export const DashboardView: React.FC = () => {
               <ShieldCheck className="w-5 h-5" />
             </div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rate</p>
-            <h3 className="text-xl font-display font-bold text-slate-900 mt-1">98.4%</h3>
+            <h3 className="text-xl font-display font-bold text-slate-900 mt-1">{analytics.successRate}%</h3>
           </div>
 
           <div className="glass-card p-5 rounded-2xl">
@@ -132,7 +135,7 @@ export const DashboardView: React.FC = () => {
               <Layers className="w-5 h-5" />
             </div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tools</p>
-            <h3 className="text-xl font-display font-bold text-slate-900 mt-1">14</h3>
+            <h3 className="text-xl font-display font-bold text-slate-900 mt-1">{integrations.length.toString().padStart(2, '0')}</h3>
           </div>
         </div>
 
@@ -145,9 +148,9 @@ export const DashboardView: React.FC = () => {
               <div className="w-12 h-12 bg-gradient-to-br from-cyan-400 to-blue-500 text-white rounded-[16px] flex items-center justify-center shadow-md">
                 <Headphones className="w-6 h-6" />
               </div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Standby</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{agents['support']?.status || 'Standby'}</span>
             </div>
-            <h4 className="text-lg font-display font-bold text-slate-900 mb-1">Support Lead</h4>
+            <h4 className="text-lg font-display font-bold text-slate-900 mb-1">{agents['support']?.name || 'Support Lead'}</h4>
             <div className="flex gap-2 mb-4">
               <div className="tool-chip px-2.5 py-1 rounded-lg text-xs font-mono font-bold text-slate-600">Zendesk</div>
               <div className="tool-chip px-2.5 py-1 rounded-lg text-xs font-mono font-bold text-slate-600">Gmail</div>
@@ -170,10 +173,10 @@ export const DashboardView: React.FC = () => {
               </div>
               <span className="text-[10px] font-bold text-cyan-600 uppercase tracking-widest flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping"></span>
-                Executing
+                {agents['sales']?.status || 'Executing'}
               </span>
             </div>
-            <h4 className="text-lg font-display font-bold text-slate-900 mb-1">Growth Engine</h4>
+            <h4 className="text-lg font-display font-bold text-slate-900 mb-1">{agents['sales']?.name || 'Growth Engine'}</h4>
             <div className="flex gap-2 mb-4">
               <div className="tool-chip px-2.5 py-1 rounded-lg text-xs font-mono font-bold text-slate-600">HubSpot</div>
               <div className="tool-chip px-2.5 py-1 rounded-lg text-xs font-mono font-bold text-slate-600">LinkedIn</div>
@@ -194,9 +197,9 @@ export const DashboardView: React.FC = () => {
               <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 text-white rounded-[16px] flex items-center justify-center shadow-md">
                 <Settings2 className="w-6 h-6" />
               </div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{agents['operations']?.status || 'Active'}</span>
             </div>
-            <h4 className="text-lg font-display font-bold text-slate-900 mb-1">Flow Architect</h4>
+            <h4 className="text-lg font-display font-bold text-slate-900 mb-1">{agents['operations']?.name || 'Flow Architect'}</h4>
             <div className="flex gap-2 mb-4">
               <div className="tool-chip px-2.5 py-1 rounded-lg text-xs font-mono font-bold text-slate-600">Stripe</div>
               <div className="tool-chip px-2.5 py-1 rounded-lg text-xs font-mono font-bold text-slate-600">PostgreSQL</div>
@@ -324,68 +327,57 @@ export const DashboardView: React.FC = () => {
           </div>
 
           <div className="divide-y divide-white/50">
-            {/* Task Row 1 */}
-            <div 
-              onClick={() => {
-                setSelectedTaskId(tasks[0]?.id || 'TASK-9042');
-                setActiveTab('task-execution');
-              }}
-              className="p-8 hover:bg-white/40 transition-all cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-3 h-3 bg-cyan-500 rounded-full shadow-[0_0_10px_#06B6D4] animate-pulse"></div>
-                  <span className="font-bold text-slate-900 group-hover:text-cyan-600 transition-colors">
-                    Investigate Customer C001 Logistics Issue
-                  </span>
-                </div>
-                <span className="px-3 py-1 bg-cyan-100 text-cyan-600 text-[10px] font-bold rounded-lg uppercase tracking-widest">
-                  Executing
-                </span>
-              </div>
-
-              <div className="flex items-center gap-6">
-                <div className="flex-1">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Gmail → Zendesk Orchestration</span>
-                    <span className="text-[10px] font-mono text-cyan-600 font-bold">82%</span>
+            {tasks.slice(0, 2).map((t) => {
+              const isWaiting = t.status === 'WAITING_FOR_APPROVAL';
+              return (
+                <div 
+                  key={t.id}
+                  onClick={() => {
+                    setSelectedTaskId(t.id);
+                    setActiveTab(isWaiting ? 'approvals' : 'task-execution');
+                  }}
+                  className="p-8 hover:bg-white/40 transition-all cursor-pointer group"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-4">
+                      {isWaiting ? (
+                        <AlertCircle className="w-5 h-5 text-orange-500" />
+                      ) : (
+                        <div className="w-3 h-3 bg-cyan-500 rounded-full shadow-[0_0_10px_#06B6D4] animate-pulse"></div>
+                      )}
+                      <span className="font-bold text-slate-900 group-hover:text-cyan-600 transition-colors">
+                        {t.title}
+                      </span>
+                    </div>
+                    <span className={`px-3 py-1 text-[10px] font-bold rounded-lg uppercase tracking-widest ${
+                      isWaiting 
+                        ? 'bg-orange-100 text-orange-600 animate-pulse' 
+                        : t.status === 'COMPLETED'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-cyan-100 text-cyan-600'
+                    }`}>
+                      {isWaiting ? 'Human Awaited' : t.status}
+                    </span>
                   </div>
-                  <div className="w-full h-2 bg-white/50 rounded-full overflow-hidden">
-                    <div className="w-[82%] h-full bg-cyan-500 shadow-[0_0_8px_#06B6D4] transition-all duration-1000"></div>
+
+                  <div className="flex items-center gap-6">
+                    <div className="flex-1">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">{t.agentName} • {t.id}</span>
+                        <span className="text-[10px] font-mono text-cyan-600 font-bold">{t.status === 'COMPLETED' ? '100%' : '65%'}</span>
+                      </div>
+                      <div className="w-full h-2 bg-white/50 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-cyan-500 shadow-[0_0_8px_#06B6D4] transition-all duration-1000"
+                          style={{ width: t.status === 'COMPLETED' ? '100%' : '65%' }}
+                        ></div>
+                      </div>
+                    </div>
+                    <div className="text-xs font-mono text-slate-400 font-bold">{t.createdAt}</div>
                   </div>
                 </div>
-                <div className="text-xs font-mono text-slate-400 font-bold">02:45</div>
-              </div>
-            </div>
-
-            {/* Task Row 2 */}
-            <div 
-              onClick={() => {
-                setSelectedTaskId(tasks[1]?.id || 'TASK-8812');
-                setActiveTab('approvals');
-              }}
-              className="p-8 hover:bg-white/40 transition-all cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-4">
-                  <AlertCircle className="w-5 h-5 text-orange-500" />
-                  <span className="font-bold text-slate-900 group-hover:text-orange-600 transition-colors">
-                    Lead Follow-up for Account #AX-902
-                  </span>
-                </div>
-                <span className="px-3 py-1 bg-orange-100 text-orange-600 text-[10px] font-bold rounded-lg uppercase tracking-widest animate-pulse">
-                  Human Awaited
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="tool-chip px-2.5 py-1 rounded-lg text-xs font-mono font-bold text-slate-600">LinkedIn</div>
-                <div className="tool-chip px-2.5 py-1 rounded-lg text-xs font-mono font-bold text-slate-600">HubSpot</div>
-                <span className="text-[11px] text-orange-600 font-medium italic">
-                  Requires message approval before dispatch
-                </span>
-              </div>
-            </div>
+              );
+            })}
           </div>
         </div>
 

@@ -5,16 +5,27 @@ import {
   Search, 
   ArrowRight, 
   Bot, 
-  PlayCircle
+  PlayCircle,
+  RotateCcw
 } from 'lucide-react';
 import type { AgentRole, TaskStatus } from '../../types';
 
 export const TaskHistoryView: React.FC = () => {
-  const { tasks, setSelectedTaskId, setActiveTab } = useApp();
+  const { tasks, setSelectedTaskId, setActiveTab, refreshTasks } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<AgentRole | 'ALL'>('ALL');
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'ALL'>('ALL');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshTasks();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const filteredTasks = tasks.filter(t => {
     const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -39,13 +50,25 @@ export const TaskHistoryView: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setActiveTab('create-task')}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all"
-        >
-          <PlayCircle className="w-4 h-4" />
-          <span>New Task</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRefresh}
+            className={`p-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-300 shadow-xs transition-colors ${
+              isRefreshing ? 'animate-spin text-indigo-600' : ''
+            }`}
+            title="Refresh Tasks"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => setActiveTab('create-task')}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all"
+          >
+            <PlayCircle className="w-4 h-4" />
+            <span>New Task</span>
+          </button>
+        </div>
       </div>
 
       <div className="glass-card p-4 rounded-2xl border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Sparkles, 
@@ -10,9 +10,12 @@ import {
   LifeBuoy, 
   Briefcase, 
   Layers, 
-  Wand2
+  Wand2,
+  Loader2,
+  CheckCircle
 } from 'lucide-react';
 import type { AgentRole, TaskPriority } from '../../types';
+import { inputsApi } from '../../api';
 
 export const CreateTaskView: React.FC = () => {
   const { createNewTask } = useApp();
@@ -21,9 +24,12 @@ export const CreateTaskView: React.FC = () => {
   const [description, setDescription] = useState('');
   const [agentRole, setAgentRole] = useState<AgentRole | 'auto'>('auto');
   const [priority, setPriority] = useState<TaskPriority>('HIGH');
-  const [files, setFiles] = useState<{ name: string; size: string; type: string }[]>([]);
+  const [files, setFiles] = useState<{ name: string; size: string; type: string; inputId?: string; isUploading?: boolean }[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTimer, setRecordingTimer] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleQuickPromptComplaint = () => {
     setTitle('Investigate customer complaint: Order #ORD-8821 delayed with missing items');
@@ -65,15 +71,51 @@ export const CreateTaskView: React.FC = () => {
     }
   };
 
+  const uploadAndAddFiles = async (fileList: FileList | File[]) => {
+    const rawFiles = Array.from(fileList);
+    for (const f of rawFiles) {
+      const fileEntry = {
+        name: f.name,
+        size: `${(f.size / 1024).toFixed(0)} KB`,
+        type: f.name.split('.').pop()?.toUpperCase() || 'FILE',
+        isUploading: true
+      };
+      setFiles(prev => [...prev, fileEntry]);
+
+      try {
+        const uploadRes = await inputsApi.uploadInput(f);
+        setFiles(prev => prev.map(item => {
+          if (item.name === f.name && item.isUploading) {
+            return {
+              ...item,
+              inputId: uploadRes.input_id,
+              isUploading: false
+            };
+          }
+          return item;
+        }));
+      } catch (err) {
+        console.warn('File upload to backend failed, keeping local file entry:', err);
+        setFiles(prev => prev.map(item => {
+          if (item.name === f.name && item.isUploading) {
+            return { ...item, isUploading: false };
+          }
+          return item;
+        }));
+      }
+    }
+  };
+
   const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const droppedFiles = Array.from(e.dataTransfer.files).map(f => ({
-        name: f.name,
-        size: `${(f.size / 1024).toFixed(0)} KB`,
-        type: f.name.split('.').pop()?.toUpperCase() || 'FILE'
-      }));
-      setFiles(prev => [...prev, ...droppedFiles]);
+      uploadAndAddFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      uploadAndAddFiles(e.target.files);
     }
   };
 
@@ -81,17 +123,27 @@ export const CreateTaskView: React.FC = () => {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!description.trim()) return;
 
-    createNewTask({
-      title: title || description.slice(0, 50) + '...',
-      description,
-      agentRole,
-      priority,
-      files
-    });
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const inputIds = files.map(f => f.inputId).filter(Boolean) as string[];
+      await createNewTask({
+        title: title || description.slice(0, 50) + '...',
+        description,
+        agentRole,
+        priority,
+        files,
+        inputIds: inputIds.length > 0 ? inputIds : undefined
+      });
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Failed to dispatch task to AgentX backend.');
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -198,7 +250,16 @@ export const CreateTaskView: React.FC = () => {
             Attachments & Context Files (PDF / CSV / DOC / Images)
           </label>
 
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileInputChange} 
+            multiple 
+            className="hidden" 
+          />
+
           <div
+            onClick={() => fileInputRef.current?.click()}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleFileDrop}
             className="border-2 border-dashed border-slate-200 hover:border-indigo-300 rounded-xl p-6 text-center bg-slate-50 transition-colors cursor-pointer"
@@ -219,9 +280,20 @@ export const CreateTaskView: React.FC = () => {
                     key={idx}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 text-xs text-slate-800 font-semibold"
                   >
-                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                    {file.isUploading ? (
+                      <Loader2 className="w-3.5 h-3.5 text-indigo-600 animate-spin" />
+                    ) : file.inputId ? (
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                    )}
                     <span>{file.name}</span>
                     <span className="text-[10px] text-slate-500 font-mono">({file.size})</span>
+                    {file.inputId && (
+                      <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-mono font-bold">
+                        {file.inputId}
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleRemoveFile(idx)}
@@ -335,25 +407,43 @@ export const CreateTaskView: React.FC = () => {
           </div>
         </div>
 
+        {submitError && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
+            {submitError}
+          </div>
+        )}
+
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={() => {
               setTitle('');
               setDescription('');
               setFiles([]);
+              setSubmitError(null);
             }}
-            className="px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors"
+            className="px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors disabled:opacity-50"
           >
             Clear / Cancel
           </button>
 
           <button
             type="submit"
-            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold shadow-md shadow-indigo-600/20 transition-all hover:scale-105"
+            disabled={isSubmitting}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold shadow-md shadow-indigo-600/20 transition-all hover:scale-105 disabled:opacity-50"
           >
-            <Play className="w-4 h-4 fill-current" />
-            <span>Create & Launch Task</span>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Dispatching to AgentX...</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4 fill-current" />
+                <span>Create & Launch Task</span>
+              </>
+            )}
           </button>
         </div>
       </form>

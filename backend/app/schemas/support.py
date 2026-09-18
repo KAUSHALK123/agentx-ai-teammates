@@ -48,3 +48,23 @@ class SupportCaseResponse(BaseModel):
     recommended_human_action: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+
+class SupportExecuteActionRequest(BaseModel):
+    """Request to execute a human-selected response or resolution in Support Review."""
+    task_id: Optional[str] = Field(default=None, description="Associated task ID")
+    case_id: Optional[str] = Field(default=None, description="Optional support case ID")
+    action: str = Field(..., description="Selected response option")
+    custom_response: Optional[str] = Field(default=None, description="Optional custom response text")
+    customer_id: Optional[str] = Field(default=None, description="Optional customer ID")
+
+
+class SupportExecuteActionResponse(BaseModel):
+    """Result of executing a support action."""
+    success: bool
+    action: str
+    message: str
+    case_id: Optional[str] = None
+    task_id: Optional[str] = None
+    status: str
+

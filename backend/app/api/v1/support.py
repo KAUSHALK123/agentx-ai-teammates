@@ -1,8 +1,15 @@
+from datetime import datetime, timezone
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, status
-from app.models.support import SupportIntent
-from app.schemas.support import SupportAnalyzeRequest, SupportAnalyzeResponse
+from app.models.support import SupportCaseStatus, SupportIntent
+from app.schemas.support import (
+    SupportAnalyzeRequest,
+    SupportAnalyzeResponse,
+    SupportCaseResponse,
+    SupportExecuteActionRequest,
+    SupportExecuteActionResponse,
+)
 from app.services.data_service import get_data_service, normalize_customer_id
 from app.services.support_analyzer import SupportAnalyzer
 
@@ -102,3 +109,109 @@ async def analyze_support_request(request: SupportAnalyzeRequest) -> SupportAnal
         approval_required=approval_required,
         explanation=classification.explanation,
     )
+
+
+@router.get(
+    "/cases",
+    response_model=List[SupportCaseResponse],
+    summary="List all support cases",
+)
+async def list_support_cases() -> List[SupportCaseResponse]:
+    """Retrieve all support cases tracked in the data service."""
+    ds = get_data_service()
+    cases = await ds.list_support_cases()
+    return [
+        SupportCaseResponse(
+            case_id=c.case_id,
+            task_id=c.task_id,
+            customer_id=c.customer_id,
+            order_id=c.order_id,
+            transaction_id=c.transaction_id,
+            intent=c.intent,
+            severity=c.severity,
+            status=c.status,
+            issue_summary=c.issue_summary,
+            resolution=c.resolution,
+            escalation_reason=c.escalation_reason,
+            recommended_human_action=c.recommended_human_action,
+            created_at=c.created_at,
+            updated_at=c.updated_at,
+        )
+        for c in cases
+    ]
+
+
+@router.get(
+    "/cases/{case_id}",
+    response_model=SupportCaseResponse,
+    summary="Get support case details",
+)
+async def get_support_case(case_id: str) -> SupportCaseResponse:
+    """Retrieve details for a specific support case."""
+    ds = get_data_service()
+    case = await ds.get_support_case(case_id)
+    if not case:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Support case '{case_id}' not found.",
+        )
+    return SupportCaseResponse(
+        case_id=case.case_id,
+        task_id=case.task_id,
+        customer_id=case.customer_id,
+        order_id=case.order_id,
+        transaction_id=case.transaction_id,
+        intent=case.intent,
+        severity=case.severity,
+        status=case.status,
+        issue_summary=case.issue_summary,
+        resolution=case.resolution,
+        escalation_reason=case.escalation_reason,
+        recommended_human_action=case.recommended_human_action,
+        created_at=case.created_at,
+        updated_at=case.updated_at,
+    )
+
+
+@router.post(
+    "/execute-action",
+    response_model=SupportExecuteActionResponse,
+    summary="Execute selected support response or escalation",
+)
+async def execute_support_action(request: SupportExecuteActionRequest) -> SupportExecuteActionResponse:
+    """Execute a human-selected response or resolution strategy in the support workflow."""
+    ds = get_data_service()
+    
+    # If case exists, update resolution
+    if request.case_id:
+        case = await ds.get_support_case(request.case_id)
+        if case:
+            case.resolution = f"Executed: {request.action}. Details: {request.custom_response or 'Standard workflow dispatched.'}"
+            if "escalat" in request.action.lower():
+                case.status = SupportCaseStatus.ESCALATED
+            else:
+                case.status = SupportCaseStatus.RESOLVED
+            await ds.update_support_case(case)
+
+    # If task exists, update task record
+    if request.task_id:
+        from app.services.task_store import get_task_store
+        tstore = get_task_store()
+        task = await tstore.get_task(request.task_id)
+        if task:
+            task.result = {
+                "support_action": request.action,
+                "custom_response": request.custom_response,
+                "executed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await tstore.update_task(task)
+
+    return SupportExecuteActionResponse(
+        success=True,
+        action=request.action,
+        message=f"Successfully executed support action: {request.action}",
+        case_id=request.case_id,
+        task_id=request.task_id,
+        status="EXECUTED",
+    )
+

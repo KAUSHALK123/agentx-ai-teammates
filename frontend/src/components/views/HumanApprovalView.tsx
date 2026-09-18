@@ -25,28 +25,15 @@ export const HumanApprovalView: React.FC = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
 
+  const [selectedApprovalId, setSelectedApprovalId] = useState<string | null>(null);
+
   const pendingTasks = tasks.filter(t => t.status === 'WAITING_FOR_APPROVAL' && t.approvalRequest);
 
-  const approvalItem: ApprovalRequest = activeApprovalModal || (pendingTasks[0]?.approvalRequest ?? {
-    id: 'APP-1029',
-    taskId: 'TASK-9042',
-    taskTitle: 'Investigate customer complaint: Order #ORD-8821',
-    agentRole: 'sales',
-    agentName: 'Sales Teammate',
-    toolName: 'send_customer_email',
-    riskLevel: 'EXTERNAL_COMMUNICATION',
-    whyRequired: 'Sales Teammate wants to send an unedited email to an external prospect regarding deal pricing.',
-    proposedAction: 'Dispatch outbound proposal email with custom enterprise discount tier (15% off ARR).',
-    payloadPreview: {
-      to: 'mark.vance@cloudcorp.io',
-      subject: 'Enterprise Proposal - CloudCorp & AgentX Partnership',
-      discountPercentage: 15,
-      annualContractValue: '$38,250',
-      expirationDate: 'Sept 30, 2026'
-    },
-    status: 'PENDING',
-    createdAt: '10 minutes ago'
-  });
+  const currentApproval = activeApprovalModal || 
+    (selectedApprovalId ? pendingTasks.find(t => t.approvalRequest?.id === selectedApprovalId)?.approvalRequest : null) || 
+    pendingTasks[0]?.approvalRequest;
+
+  const approvalItem: ApprovalRequest | null = currentApproval || null;
 
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-8">
@@ -62,11 +49,39 @@ export const HumanApprovalView: React.FC = () => {
           </p>
         </div>
 
-        <div className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
-          <span>{pendingTasks.length} Pending Signoff</span>
+        <div className="flex items-center gap-3">
+          {pendingTasks.length > 1 && (
+            <select
+              value={approvalItem?.id || ''}
+              onChange={(e) => setSelectedApprovalId(e.target.value)}
+              className="bg-white text-slate-800 text-xs font-bold rounded-xl px-3 py-2 border border-slate-200 shadow-xs cursor-pointer"
+            >
+              {pendingTasks.map(t => (
+                <option key={t.approvalRequest!.id} value={t.approvalRequest!.id}>
+                  {t.approvalRequest!.id} - {t.title.slice(0, 25)}...
+                </option>
+              ))}
+            </select>
+          )}
+
+          <div className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${pendingTasks.length > 0 ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'}`}></span>
+            <span>{pendingTasks.length} Pending Signoff</span>
+          </div>
         </div>
       </div>
+
+      {!approvalItem ? (
+        <div className="glass-card rounded-2xl p-12 text-center border border-slate-200 bg-white/60 space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto">
+            <Check className="w-6 h-6 stroke-[3]" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900">All Operations Clear</h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            There are no pending actions requiring human approval at this moment. AI teammates are operating within their authorized guardrails.
+          </p>
+        </div>
+      ) : (
 
       <div className="glass-card rounded-2xl p-6 md:p-8 border-2 border-amber-300 bg-amber-50/30 shadow-xl space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200">
@@ -198,6 +213,7 @@ export const HumanApprovalView: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };

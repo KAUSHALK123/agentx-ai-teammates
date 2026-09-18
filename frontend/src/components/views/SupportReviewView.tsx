@@ -41,12 +41,14 @@ export const SupportReviewView: React.FC = () => {
   const [customText, setCustomText] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
 
-  const handleExecute = () => {
+  const handleExecute = async () => {
+    if (!task) return;
     setIsExecuting(true);
-    setTimeout(() => {
-      executeSupportResponse(task.id, selectedOption, customText);
+    try {
+      await executeSupportResponse(task.id, selectedOption, customText);
+    } finally {
       setIsExecuting(false);
-    }, 1200);
+    }
   };
 
   return (
@@ -63,16 +65,32 @@ export const SupportReviewView: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setSelectedTaskId(task.id);
-            setActiveTab('task-execution');
-          }}
-          className="text-xs text-indigo-600 hover:underline font-bold flex items-center gap-1"
-        >
-          <span>View Live Execution Logs</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-3">
+          {tasks.filter(t => t.supportReview).length > 1 && (
+            <select
+              value={task?.id || ''}
+              onChange={(e) => setSelectedTaskId(e.target.value)}
+              className="bg-white text-slate-800 text-xs font-bold rounded-xl px-3 py-2 border border-slate-200 shadow-xs cursor-pointer"
+            >
+              {tasks.filter(t => t.supportReview).map(t => (
+                <option key={t.id} value={t.id}>
+                  {t.id} - {t.title.slice(0, 25)}...
+                </option>
+              ))}
+            </select>
+          )}
+
+          <button
+            onClick={() => {
+              if (task) setSelectedTaskId(task.id);
+              setActiveTab('task-execution');
+            }}
+            className="text-xs text-indigo-600 hover:underline font-bold flex items-center gap-1"
+          >
+            <span>View Live Execution Logs</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
