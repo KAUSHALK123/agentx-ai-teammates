@@ -1,9 +1,11 @@
 import uuid
-from typing import List
-from fastapi import APIRouter, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status
 from app.agents.base import StructuredTaskPlan
 from app.agents.router import AgentRouter
 from app.models.task import AgentType, Task, TaskStatus
+from app.models.user import User
+from app.models.workspace import Workspace
 from app.schemas.agent import TaskPlanRequest, TaskPlanResponse
 from app.schemas.task import (
     TaskCreateRequest,
@@ -18,6 +20,7 @@ from app.services.approval_store import get_approval_store
 from app.services.execution_engine import get_execution_engine
 from app.services.orchestrator import get_orchestrator
 from app.services.task_store import get_task_store
+from app.services.auth_service import get_current_user, get_current_workspace, verify_workspace_access, verify_agent_access, verify_task_access
 
 router = APIRouter()
 _router_instance = AgentRouter()
@@ -29,14 +32,33 @@ _router_instance = AgentRouter()
     status_code=status.HTTP_201_CREATED,
     summary="Create and execute a business task",
 )
-async def create_task(request: TaskCreateRequest) -> TaskResponse:
+async def create_task(
+    request: TaskCreateRequest,
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
+) -> TaskResponse:
     """Accept a business request, select an agent teammate, plan, execute, and verify."""
+    await verify_workspace_access(current_user.id, workspace.id)
+
+    if request.selected_agent:
+        ag_id = request.selected_agent.value if hasattr(request.selected_agent, "value") else str(request.selected_agent)
+        await verify_agent_access(current_user.id, ag_id, workspace.id)
+
     orchestrator = get_orchestrator()
     task: Task = await orchestrator.create_and_run_task(
         user_request=request.user_request,
         explicit_agent=request.selected_agent,
         input_ids=request.input_ids,
     )
+
+    # Tag task with ownership metadata
+    task.workspace_id = workspace.id
+    task.created_by = current_user.id
+    if task.selected_agent:
+        task.agent_id = task.selected_agent.value if hasattr(task.selected_agent, "value") else str(task.selected_agent)
+    
+    await get_task_store().update_task(task)
+
     return TaskResponse(
         task_id=task.task_id,
         selected_agent=task.selected_agent,
@@ -49,14 +71,23 @@ async def create_task(request: TaskCreateRequest) -> TaskResponse:
     response_model=TaskPlanResponse,
     summary="Generate a structured task plan without execution",
 )
-async def generate_task_plan(request: TaskPlanRequest) -> TaskPlanResponse:
+async def generate_task_plan(
+    request: TaskPlanRequest,
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
+) -> TaskPlanResponse:
     """Understand a business request, select the right teammate, and return a structured execution plan."""
+    await verify_workspace_access(current_user.id, workspace.id)
+
     req_clean = request.user_request.strip()
     if not req_clean:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Business request cannot be empty.",
         )
+
+    if request.selected_agent:
+        await verify_agent_access(current_user.id, request.selected_agent, workspace.id)
 
     # 1. Route the request
     route_result = await _router_instance.determine_route(
@@ -97,10 +128,14 @@ async def generate_task_plan(request: TaskPlanRequest) -> TaskPlanResponse:
         if at.value == agent.agent_id:
             agent_type = at
             break
+
     planned_task = Task(
         task_id=task_id,
         user_request=req_clean,
         selected_agent=agent_type,
+        agent_id=agent.agent_id,
+        workspace_id=workspace.id,
+        created_by=current_user.id,
         status=TaskStatus.PLANNING,
         plan=plan,
     )
@@ -122,7 +157,11 @@ async def generate_task_plan(request: TaskPlanRequest) -> TaskPlanResponse:
     response_model=TaskExecuteResponse,
     summary="Execute a planned business task",
 )
-async def execute_task(task_id: str) -> TaskExecuteResponse:
+async def execute_task(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
+) -> TaskExecuteResponse:
     """Execute the existing task plan step-by-step through controlled tools, retries, and verification."""
     store = get_task_store()
     task = await store.get_task(task_id)
@@ -132,21 +171,24 @@ async def execute_task(task_id: str) -> TaskExecuteResponse:
             detail=f"Task with ID '{task_id}' not found",
         )
 
+    await verify_task_access(current_user.id, task, workspace.id)
+
     # Resolve agent
     agent_id = task.selected_agent.value if task.selected_agent else None
     if not agent_id:
-        # Route to agent
         route_result = await _router_instance.determine_route(task.user_request)
         if not route_result.selected_agent:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Unable to determine agent for unassigned task.",
             )
-        agent_id = route_result.selected_agent
+        agent_id = route_result.selected_agent.value if hasattr(route_result.selected_agent, "value") else str(route_result.selected_agent)
         for at in AgentType:
             if at.value == agent_id:
                 task.selected_agent = at
                 break
+
+    await verify_agent_access(current_user.id, agent_id, workspace.id)
 
     agent = _router_instance.get_agent(agent_id)
     if not agent:
@@ -155,13 +197,17 @@ async def execute_task(task_id: str) -> TaskExecuteResponse:
             detail=f"Agent '{agent_id}' not found in registry.",
         )
 
-    # Ensure plan exists
     if not task.plan or not task.plan.steps:
         task.plan = await agent.plan(task.user_request, task_id=task.task_id)
 
-    # Execute plan through TaskExecutionEngine
     execution_engine = get_execution_engine()
     executed_task = await execution_engine.execute_task(task, agent, task.plan)
+    
+    # Preserve workspace & ownership tags
+    executed_task.workspace_id = workspace.id
+    executed_task.created_by = task.created_by or current_user.id
+    executed_task.agent_id = agent_id
+
     await store.update_task(executed_task)
 
     approval_data = None
@@ -171,6 +217,10 @@ async def execute_task(task_id: str) -> TaskExecuteResponse:
         appr_store = get_approval_store()
         appr = await appr_store.get_approval(executed_task.current_approval_id)
         if appr:
+            appr.workspace_id = workspace.id
+            appr.agent_id = agent_id
+            appr.requested_by = current_user.id
+            await appr_store.update_approval(appr)
             approval_data = appr.model_dump()
 
     return TaskExecuteResponse(
@@ -189,7 +239,11 @@ async def execute_task(task_id: str) -> TaskExecuteResponse:
     response_model=TaskExecutionDetailResponse,
     summary="Retrieve detailed execution trace, step breakdown, and audit records",
 )
-async def get_task_execution(task_id: str) -> TaskExecutionDetailResponse:
+async def get_task_execution(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
+) -> TaskExecutionDetailResponse:
     """Return task execution details including step statuses, tool logs, verification, and final result."""
     store = get_task_store()
     task = await store.get_task(task_id)
@@ -198,6 +252,8 @@ async def get_task_execution(task_id: str) -> TaskExecutionDetailResponse:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task with ID '{task_id}' not found",
         )
+
+    await verify_task_access(current_user.id, task, workspace.id)
 
     steps = task.plan.steps if task.plan else []
     selected_agent_str = task.selected_agent.value if task.selected_agent else None
@@ -230,7 +286,11 @@ async def get_task_execution(task_id: str) -> TaskExecutionDetailResponse:
     response_model=TaskDetailResponse,
     summary="Retrieve task status and concise execution information",
 )
-async def get_task_by_id(task_id: str) -> TaskDetailResponse:
+async def get_task_by_id(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
+) -> TaskDetailResponse:
     """Fetch task information, status, result, and stage history."""
     store = get_task_store()
     task = await store.get_task(task_id)
@@ -239,6 +299,9 @@ async def get_task_by_id(task_id: str) -> TaskDetailResponse:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task with ID '{task_id}' not found",
         )
+
+    await verify_task_access(current_user.id, task, workspace.id)
+
     return TaskDetailResponse(
         task_id=task.task_id,
         user_request=task.user_request,
@@ -258,7 +321,11 @@ async def get_task_by_id(task_id: str) -> TaskDetailResponse:
     "/{task_id}/inputs",
     summary="Get all inputs associated with a task",
 )
-async def get_task_inputs(task_id: str):
+async def get_task_inputs(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
+):
     """Return all multimodal inputs attached to this business task."""
     store = get_task_store()
     task = await store.get_task(task_id)
@@ -267,6 +334,8 @@ async def get_task_inputs(task_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task with ID '{task_id}' not found",
         )
+
+    await verify_task_access(current_user.id, task, workspace.id)
 
     from app.services.input_store import get_input_store
     from app.schemas.input import InputDetailResponse, TaskInputsResponse
@@ -313,10 +382,26 @@ async def get_task_inputs(task_id: str):
     response_model=List[TaskDetailResponse],
     summary="List recent tasks",
 )
-async def list_tasks(limit: int = 50) -> List[TaskDetailResponse]:
-    """Return recent tasks tracked by the system."""
+async def list_tasks(
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
+) -> List[TaskDetailResponse]:
+    """Return recent tasks accessible to user in active workspace."""
+    await verify_workspace_access(current_user.id, workspace.id)
     store = get_task_store()
-    tasks = await store.list_tasks(limit=limit)
+    all_tasks = await store.list_tasks(limit=limit)
+
+    filtered_tasks = []
+    for t in all_tasks:
+        if getattr(t, "workspace_id", None) and t.workspace_id != workspace.id:
+            continue
+        try:
+            await verify_task_access(current_user.id, t, workspace.id)
+            filtered_tasks.append(t)
+        except HTTPException:
+            continue
+
     return [
         TaskDetailResponse(
             task_id=t.task_id,
@@ -331,5 +416,5 @@ async def list_tasks(limit: int = 50) -> List[TaskDetailResponse]:
             events=t.events,
             input_ids=getattr(t, "input_ids", []),
         )
-        for t in tasks
+        for t in filtered_tasks
     ]

@@ -39,6 +39,9 @@ class Task(BaseModel):
     task_id: str
     user_request: str
     selected_agent: Optional[AgentType] = None
+    agent_id: Optional[str] = None
+    workspace_id: str = "ws_default"
+    created_by: str = "usr_demo_owner"
     status: TaskStatus = TaskStatus.CREATED
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

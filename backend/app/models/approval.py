@@ -24,6 +24,8 @@ class ApprovalRecord(BaseModel):
     task_id: str
     step_id: Union[int, str]
     agent_id: str
+    workspace_id: str = "ws_default"
+    requested_by: str = "usr_demo_owner"
     action: str
     tool_id: Optional[str] = None
     risk_level: RiskLevel = RiskLevel.HIGH

@@ -26,7 +26,29 @@ from .input import (
     InputErrorCode,
 )
 
+from .user import User
+from .workspace import Workspace, WorkspaceRole, WorkspaceMembershipStatus, WorkspaceMembership
+from .agent_ownership import (
+    AgentInstance,
+    AgentMemberRole,
+    AgentMembershipStatus,
+    AgentInvitationStatus,
+    AgentMembership,
+    AgentInvitation,
+)
+
 __all__ = [
+    "User",
+    "Workspace",
+    "WorkspaceRole",
+    "WorkspaceMembershipStatus",
+    "WorkspaceMembership",
+    "AgentInstance",
+    "AgentMemberRole",
+    "AgentMembershipStatus",
+    "AgentInvitationStatus",
+    "AgentMembership",
+    "AgentInvitation",
     "Task",
     "TaskStatus",
     "AgentType",
