@@ -8,6 +8,7 @@ class TaskCreateRequest(BaseModel):
     """Schema for initiating an AgentX business task."""
     user_request: str = Field(..., min_length=1, description="Business request or prompt for the AI teammate")
     selected_agent: Optional[str] = Field(None, description="Optional explicit agent override ('support', 'sales', 'operations')")
+    input_ids: List[str] = Field(default_factory=list, description="Optional list of uploaded input IDs attached to the task")
 
 
 class TaskResponse(BaseModel):
@@ -29,6 +30,7 @@ class TaskDetailResponse(BaseModel):
     error: Optional[str] = None
     approval_required: bool = False
     events: List[ExecutionEvent] = Field(default_factory=list)
+    input_ids: List[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

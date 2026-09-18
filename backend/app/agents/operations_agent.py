@@ -127,6 +127,7 @@ class OperationsAgent(BaseAgent):
             re.search(r"\b(operations?\s*check|operations?\s*workflow|daily\s*check|operational\s*check|daily\s*operations?|operations?\s*report)\b", req_lower)
             or re.search(r"\b(process|run|execute)\b.*\b(daily|operations?|workflow)\b", req_lower)
             or re.search(r"\bfind\b.*\b(follow-?up|exceptions?)\b", req_lower)
+            or re.search(r"\banalyz\w*\b.*\b(data|sales|operations?|records?)\b.*\b(attention|exceptions?|anomal\w*|issues?)\b", req_lower)
         ):
             steps = [
                 PlanStep(

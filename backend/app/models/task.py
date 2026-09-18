@@ -51,6 +51,7 @@ class Task(BaseModel):
     events: List[ExecutionEvent] = Field(default_factory=list)
     execution_records: List[Dict[str, Any]] = Field(default_factory=list)
     verification_result: Optional[Dict[str, Any]] = None
+    input_ids: List[str] = Field(default_factory=list)
 
 
     def add_event(
