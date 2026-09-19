@@ -549,8 +549,21 @@ class GmailSendApprovedEmailTool(BaseTool):
         agent_id = kwargs.get("agent_id") or "sales"
         lead_id = kwargs.get("lead_id")
         customer_id = kwargs.get("customer_id")
-        recipient_email = kwargs.get("recipient_email") or kwargs.get("to_email")
-        recipient_name = kwargs.get("recipient_name") or kwargs.get("to_name") or "Valued Contact"
+        recipient_email = (
+            kwargs.get("recipient_email")
+            or kwargs.get("to_email")
+            or kwargs.get("to")
+            or kwargs.get("email")
+            or kwargs.get("customer_email")
+            or kwargs.get("target_email")
+        )
+        recipient_name = (
+            kwargs.get("recipient_name")
+            or kwargs.get("to_name")
+            or kwargs.get("name")
+            or kwargs.get("customer_name")
+            or "Valued Contact"
+        )
         subject = kwargs.get("subject") or "AgentX Communication"
         message = kwargs.get("message") or kwargs.get("email_body") or "Hello from AgentX AI Teammates."
 
@@ -558,13 +571,13 @@ class GmailSendApprovedEmailTool(BaseTool):
             lead = await self.data_service.get_lead(str(lead_id))
             if lead:
                 recipient_email = lead.email
-                recipient_name = lead.name
+                recipient_name = recipient_name if recipient_name != "Valued Contact" else lead.name
 
         if not recipient_email and customer_id:
             cust = await self.data_service.get_customer(str(customer_id))
             if cust:
                 recipient_email = cust.email
-                recipient_name = cust.name
+                recipient_name = recipient_name if recipient_name != "Valued Contact" else cust.name
 
         recipient_email = recipient_email or "client@example.com"
 
