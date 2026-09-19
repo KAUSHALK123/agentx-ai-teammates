@@ -121,6 +121,12 @@ class N8nToolProvider:
         Returns normalized N8nExecutionResult with structured error codes on failure.
         """
         body = payload.model_dump() if hasattr(payload, "model_dump") else (payload if isinstance(payload, dict) else {})
+        if not body.get("action"):
+            body["action"] = body.get("requested_action") or "process_lead"
+        if not body.get("requested_action"):
+            body["requested_action"] = body.get("action")
+        if not body.get("check_type"):
+            body["check_type"] = "daily"
 
         # Idempotency Check
         task_id = body.get("task_id") or "task_general"

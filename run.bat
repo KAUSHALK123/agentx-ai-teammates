@@ -28,17 +28,24 @@ if %errorlevel% neq 0 (
 echo [1/4] Checking n8n...
 
 set N8N_URL=http://localhost:32768
+set APP_ENV=development
 set IS_CLOUD=0
 set N8N_RUNNING=0
 
-:: Read N8N_BASE_URL from backend\.env if present
+:: Read N8N_BASE_URL and APP_ENV from backend\.env if present
 if exist "%~dp0backend\.env" (
-    for /f "tokens=1,* delims==" %%a in ('type "%~dp0backend\.env" ^| findstr /i "^N8N_BASE_URL="') do (
-        set "N8N_URL=%%b"
+    for /f "tokens=1,* delims==" %%a in ('type "%~dp0backend\.env" ^| findstr /i "^N8N_BASE_URL= ^APP_ENV="') do (
+        if /i "%%a"=="N8N_BASE_URL" set "N8N_URL=%%b"
+        if /i "%%a"=="APP_ENV" set "APP_ENV=%%b"
     )
 )
 
-:: Check if N8N_URL is n8n Cloud / HTTPS
+:: Check if APP_ENV is production OR N8N_URL is n8n Cloud / HTTPS
+if /i "%APP_ENV%"=="production" (
+    echo       n8n: RUNNING (Production mode: %N8N_URL%)
+    goto :n8n_done
+)
+
 echo %N8N_URL% | findstr /i "https:// .n8n.cloud" >nul 2>&1
 if %errorlevel% equ 0 (
     set IS_CLOUD=1

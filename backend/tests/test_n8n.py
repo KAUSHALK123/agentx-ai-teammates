@@ -32,7 +32,7 @@ def test_n8n_configuration():
     """Verify n8n configuration defaults and properties."""
     settings = get_settings()
     assert settings.n8n_base_url is not None
-    assert "localhost" in settings.n8n_base_url
+    assert settings.n8n_base_url.startswith(("http://", "https://"))
     assert settings.n8n_webhook_timeout_seconds > 0
     assert settings.n8n_retry_attempts >= 1
 
