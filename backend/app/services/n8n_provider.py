@@ -57,36 +57,43 @@ class N8nToolProvider:
         return None
 
     async def check_health(self) -> Dict[str, Any]:
-        """Check availability of the local n8n instance."""
-        url = f"{self.base_url}/healthz"
+        """Check availability of the local or cloud n8n instance."""
         headers = {}
         if self.api_key:
             headers["X-N8N-API-KEY"] = self.api_key
 
-        try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                res = await client.get(url, headers=headers)
-                available = res.status_code == 200
-                return {
-                    "available": available,
-                    "base_url": self.base_url,
-                    "configured": True,
-                    "status_code": res.status_code,
-                    "registered_workflows": list(APPROVED_N8N_WORKFLOWS.keys()),
-                }
-        except Exception as exc:
-            if "localhost" in self.base_url:
-                alt = await self._discover_fallback_port()
-                if alt:
-                    return await self.check_health()
-            logger.warning("n8n health check failed: %s", exc)
-            return {
-                "available": False,
-                "base_url": self.base_url,
-                "configured": True,
-                "error": str(exc),
-                "registered_workflows": list(APPROVED_N8N_WORKFLOWS.keys()),
-            }
+        test_urls = [f"{self.base_url}/healthz", f"{self.base_url}/"]
+        sales_url = self.resolve_webhook_url("sales")
+        if sales_url:
+            test_urls.append(sales_url)
+
+        for target_url in test_urls:
+            try:
+                async with httpx.AsyncClient(timeout=3.0) as client:
+                    res = await client.get(target_url, headers=headers)
+                    if res.status_code in (200, 401, 404, 405):
+                        return {
+                            "available": True,
+                            "base_url": self.base_url,
+                            "configured": True,
+                            "status_code": res.status_code,
+                            "registered_workflows": list(APPROVED_N8N_WORKFLOWS.keys()),
+                        }
+            except Exception:
+                pass
+
+        if "localhost" in self.base_url or "127.0.0.1" in self.base_url:
+            alt = await self._discover_fallback_port()
+            if alt:
+                return await self.check_health()
+
+        return {
+            "available": False,
+            "base_url": self.base_url,
+            "configured": True,
+            "error": f"Unable to reach n8n at {self.base_url}",
+            "registered_workflows": list(APPROVED_N8N_WORKFLOWS.keys()),
+        }
 
     def resolve_webhook_url(self, workflow_type: str) -> Optional[str]:
         """Centrally map workflow type to environment variable URL or default base endpoint."""

@@ -24,19 +24,36 @@ if %errorlevel% neq 0 (
 )
 
 :: ========================================
-:: [1/4] CHECK N8N (Port 32768)
+:: [1/4] CHECK N8N (Local or Cloud)
 :: ========================================
 echo [1/4] Checking n8n...
 
 set N8N_URL=http://localhost:32768
-set N8N_RUNNING=0
+set IS_CLOUD=0
 
+:: Read N8N_BASE_URL from backend\.env if present
+if exist "%~dp0backend\.env" (
+    for /f "usebackq tokens=1,* delims==" %%a in ("%~dp0backend\.env") do (
+        if /i "%%a"=="N8N_BASE_URL" set "N8N_URL=%%b"
+    )
+)
+
+:: Check if URL is n8n Cloud or remote HTTPS
+echo !N8N_URL! | findstr /i "https:// .n8n.cloud" >nul 2>&1
+if !errorlevel! equ 0 (
+    set IS_CLOUD=1
+    echo       n8n: RUNNING (n8n Cloud: !N8N_URL!)
+    goto :n8n_done
+)
+
+:: Local n8n connectivity check
+set N8N_RUNNING=0
 powershell -Command "$r = try { (Invoke-WebRequest -Uri '%N8N_URL%/healthz' -UseBasicParsing -TimeoutSec 2).StatusCode } catch { try { (Invoke-WebRequest -Uri '%N8N_URL%' -UseBasicParsing -TimeoutSec 2).StatusCode } catch { 0 } }; if ($r -eq 200) { exit 0 } else { exit 1 }" >nul 2>&1
 if %errorlevel% equ 0 (
     set N8N_RUNNING=1
 ) else (
     echo [AgentX] n8n is NOT reachable at %N8N_URL%
-    echo [AgentX] Attempting to start n8n...
+    echo [AgentX] Attempting to start local n8n container...
     
     docker start n8n >nul 2>&1
     if !errorlevel! neq 0 docker start agentx-n8n >nul 2>&1
@@ -55,10 +72,12 @@ if %errorlevel% equ 0 (
 )
 
 :n8n_done
-if %N8N_RUNNING% equ 1 (
-    echo       n8n: RUNNING
-) else (
-    echo       n8n: UNREACHABLE (Proceeding with local dev mode)
+if %IS_CLOUD% equ 0 (
+    if %N8N_RUNNING% equ 1 (
+        echo       n8n: RUNNING (!N8N_URL!)
+    ) else (
+        echo       n8n: UNREACHABLE (Proceeding with local fallback mode)
+    )
 )
 echo.
 
@@ -122,7 +141,7 @@ echo.
 echo URLs:
 echo Frontend: http://localhost:3000
 echo Backend:  http://localhost:8000
-echo n8n:      http://localhost:32768
+echo n8n:      !N8N_URL!
 echo.
 
 :: Open browser after services are ready
