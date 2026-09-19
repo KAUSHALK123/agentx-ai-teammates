@@ -535,6 +535,9 @@ def initialize_default_tools() -> None:
         N8nSupportHandleIssueTool,
         N8nSendFollowupTool,
         N8nOperationsDailyCheckTool,
+        GmailSendApprovedEmailTool,
+        CrmLeadActionsTool,
+        SupportCaseActionsTool,
     )
     registry = get_tool_registry()
     tools = [
@@ -555,6 +558,9 @@ def initialize_default_tools() -> None:
         N8nSupportHandleIssueTool(),
         N8nSendFollowupTool(),
         N8nOperationsDailyCheckTool(),
+        GmailSendApprovedEmailTool(),
+        CrmLeadActionsTool(),
+        SupportCaseActionsTool(),
     ]
     for tool in tools:
         if not registry.has_tool(tool.tool_id):

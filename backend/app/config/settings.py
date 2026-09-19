@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     n8n_sales_webhook_url: Optional[str] = None
     n8n_support_webhook_url: Optional[str] = None
     n8n_operations_webhook_url: Optional[str] = None
+    n8n_gmail_webhook_url: Optional[str] = None
+    n8n_crm_webhook_url: Optional[str] = None
+    n8n_support_case_webhook_url: Optional[str] = None
 
     @property
     def get_timeout(self) -> float:

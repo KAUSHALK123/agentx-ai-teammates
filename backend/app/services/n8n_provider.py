@@ -98,8 +98,12 @@ class N8nToolProvider:
             return settings.n8n_support_webhook_url or f"{self.base_url}/webhook/agentx-support-handle-issue"
         elif wf in ("operations", "operations_daily_business_check", "operations_daily_check", "03_operations_daily_check"):
             return settings.n8n_operations_webhook_url or f"{self.base_url}/webhook/agentx-operations-daily-check"
-        elif wf == "sales_send_followup":
-            return f"{self.base_url}/webhook/agentx-sales-send-followup"
+        elif wf in ("gmail", "gmail_send_approved_email", "04_gmail_send_approved_email", "sales_send_followup", "send_customer_email"):
+            return settings.n8n_gmail_webhook_url or f"{self.base_url}/webhook/agentx-gmail-send-approved-email"
+        elif wf in ("crm", "crm_lead_actions", "05_crm_lead_actions", "update_lead"):
+            return settings.n8n_crm_webhook_url or f"{self.base_url}/webhook/agentx-crm-lead-actions"
+        elif wf in ("support_case", "support_case_actions", "06_support_case_actions", "escalate_case", "update_support_case"):
+            return settings.n8n_support_case_webhook_url or f"{self.base_url}/webhook/agentx-support-case-actions"
         return None
 
     async def execute_workflow(self, workflow_type: str, payload: Any) -> N8nExecutionResult:
@@ -295,7 +299,8 @@ class N8nToolProvider:
             )
 
         # 2. Agent Authorization Check
-        if payload.agent_id != wf_def.allowed_agent:
+        allowed_agents = [a.strip().lower() for a in wf_def.allowed_agent.split(",")]
+        if payload.agent_id.lower() not in allowed_agents:
             logger.error(
                 "Agent '%s' is not authorized to invoke workflow '%s' (allowed: '%s')",
                 payload.agent_id,
