@@ -92,10 +92,10 @@ function mapBackendTaskToFrontend(
     ? bt.events.map((ev, idx) => ({
         id: `ev-${idx}`,
         stepIndex: idx + 1,
-        label: ev.event_type.replace(/_/g, ' '),
+        label: (ev.event_type || `Event ${idx + 1}`).replace(/_/g, ' '),
         status: idx === bt.events.length - 1 && bt.status !== 'COMPLETED' ? 'IN_PROGRESS' : 'COMPLETED',
-        timestamp: new Date(ev.timestamp).toLocaleTimeString(),
-        actionSummary: ev.description,
+        timestamp: ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : 'Just now',
+        actionSummary: ev.description || '',
         details: { output: ev.details }
       }))
     : [
