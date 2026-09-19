@@ -26,3 +26,10 @@ services:
         value: "30.0"
       - key: CORS_ORIGINS
         value: "*"
+      - key: COGNEE_MODE
+        value: cloud
+      - key: COGNEE_SERVICE_URL
+        value: https://api.cognee.ai
+      - key: COGNEE_DATASET_NAME
+        value: demo_business_knowledge
+
