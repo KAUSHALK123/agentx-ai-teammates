@@ -263,6 +263,16 @@ class DemoDataService(IDataService):
         cid_norm = normalize_customer_id(customer_id)
         async with self._lock:
             cust = self._customers.get(cid_norm) or self._customers.get(customer_id.strip().upper())
+            if not cust and customer_id.strip():
+                clean_name = customer_id.strip().title()
+                cust = Customer(
+                    customer_id=cid_norm,
+                    name=clean_name,
+                    email=f"{clean_name.lower().replace(' ', '.')}@example.com",
+                    phone="+91-9876543210",
+                    status="active",
+                )
+                self._customers[cid_norm] = cust
             return cust.model_copy() if cust else None
 
     async def find_customer(self, query: str) -> Optional[Customer]:
@@ -278,12 +288,33 @@ class DemoDataService(IDataService):
                     or q in cust.name.lower()
                 ):
                     return cust.model_copy()
+            if query.strip():
+                clean_name = query.replace("Customer", "").replace("customer", "").strip().title() or "Customer"
+                cust = Customer(
+                    customer_id=f"CUST-{abs(hash(clean_name)) % 900 + 100}",
+                    name=clean_name,
+                    email=f"{clean_name.lower().replace(' ', '.')}@example.com",
+                    phone="+91-9876543210",
+                    status="active",
+                )
+                self._customers[cust.customer_id] = cust
+                return cust.model_copy()
             return None
 
     async def get_order(self, order_id: str) -> Optional[OrderTransaction]:
         oid_norm = normalize_order_id(order_id)
         async with self._lock:
             order = self._orders.get(oid_norm) or self._orders.get(order_id.strip().upper())
+            if not order and order_id.strip():
+                order = OrderTransaction(
+                    order_id=oid_norm,
+                    customer_id="CUST-001",
+                    amount=550.00,
+                    status="delayed",
+                    payment_status="successful",
+                    transaction_id=f"TXN-{oid_norm.replace('ORD-', '')}",
+                )
+                self._orders[oid_norm] = order
             return order.model_copy() if order else None
 
     async def get_orders_for_customer(self, customer_id: str) -> List[OrderTransaction]:
@@ -303,6 +334,17 @@ class DemoDataService(IDataService):
                     or order.order_id == raw_tid
                 ):
                     return order.model_copy()
+            if transaction_id.strip():
+                order = OrderTransaction(
+                    order_id=f"ORD-{tid.replace('TXN-', '')}",
+                    customer_id="CUST-001",
+                    amount=550.00,
+                    status="delayed",
+                    payment_status="successful",
+                    transaction_id=tid,
+                )
+                self._orders[order.order_id] = order
+                return order.model_copy()
             return None
 
     async def get_lead(self, lead_id: str) -> Optional[Lead]:

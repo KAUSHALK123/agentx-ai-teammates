@@ -133,10 +133,10 @@ class LookupOrderTool(BaseTool):
                 order = await self.data_service.get_order(str(order_id))
                 if not order:
                     return ToolResult(
-                        success=False,
+                        success=True,
                         tool_id=self.tool_id,
-                        error="Order not found",
-                        message=f"Order '{order_id}' was not found in system",
+                        data={"found": False, "order_id": str(order_id)},
+                        message=f"Order '{order_id}' was not found in records",
                     )
                 return ToolResult(
                     success=True,
@@ -212,9 +212,9 @@ class LookupTransactionTool(BaseTool):
             txn = await self.data_service.get_transaction(str(tid))
             if not txn:
                 return ToolResult(
-                    success=False,
+                    success=True,
                     tool_id=self.tool_id,
-                    error="Transaction not found",
+                    data={"found": False, "transaction_id": str(tid)},
                     message=f"No transaction found matching '{tid}'",
                 )
 
