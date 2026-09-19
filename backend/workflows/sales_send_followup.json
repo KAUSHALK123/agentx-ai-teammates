@@ -1,6 +1,7 @@
 [
   {
     "name": "AgentX - Sales Send Follow-Up",
+    "active": true,
     "nodes": [
       {
         "parameters": {
