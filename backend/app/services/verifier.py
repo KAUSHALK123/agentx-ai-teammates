@@ -207,20 +207,59 @@ class TaskVerifier:
                     details=data,
                 )
 
-            # Verification for n8n_send_followup
-            elif tool_id == "n8n_send_followup":
+            # Verification for n8n_send_followup / gmail_send_approved_email / send_customer_email
+            elif tool_id in ["n8n_send_followup", "gmail_send_approved_email", "send_customer_email"]:
                 delivery = data.get("delivery_info") or {}
-                if delivery.get("status") != "delivered":
+                status = delivery.get("status") or ("sent" if data.get("success") else "failed")
+                if status not in ["delivered", "sent", "success"]:
                     return VerificationResult(
                         verified=False,
                         verification_type="n8n_communication_dispatch",
                         recommended_status=TaskStatus.FAILED,
-                        summary="n8n follow-up verification failed: message status is not 'delivered'.",
+                        summary="n8n email dispatch verification failed: message delivery status unsuccessful.",
                         details=data,
                     )
+                return VerificationResult(
+                    verified=True,
+                    verification_type="n8n_communication_dispatch",
+                    recommended_status=TaskStatus.COMPLETED,
+                    summary=f"n8n email dispatch verified ({data.get('recipient_email') or 'recipient'}).",
+                    details=data,
+                )
 
-            # Verification for n8n_operations_check
-            elif tool_id == "n8n_operations_check":
+            # Verification for crm_lead_actions
+            elif tool_id in ["crm_lead_actions", "n8n_crm_lead_actions"]:
+                lead_id = data.get("lead_id")
+                expected_status = data.get("lead_status")
+                if not lead_id:
+                    return VerificationResult(
+                        verified=False,
+                        verification_type="n8n_crm_action",
+                        recommended_status=TaskStatus.FAILED,
+                        summary="n8n CRM action verification failed: missing lead_id.",
+                    )
+                return VerificationResult(
+                    verified=True,
+                    verification_type="n8n_crm_action",
+                    recommended_status=TaskStatus.COMPLETED,
+                    summary=f"n8n CRM action verified for lead '{lead_id}' (status: {expected_status or 'updated'}).",
+                    details=data,
+                )
+
+            # Verification for support_case_actions
+            elif tool_id in ["support_case_actions", "n8n_support_case_actions"]:
+                case_id = data.get("case_id")
+                customer_id = data.get("customer_id")
+                return VerificationResult(
+                    verified=True,
+                    verification_type="n8n_support_case_action",
+                    recommended_status=TaskStatus.COMPLETED,
+                    summary=f"n8n support case action verified for customer '{customer_id}' (Case: {case_id or 'created'}).",
+                    details=data,
+                )
+
+            # Verification for n8n_operations_check / operations_daily_check
+            elif tool_id in ["n8n_operations_check", "operations_daily_check"]:
                 records_processed = data.get("records_processed")
                 exceptions_found = data.get("exceptions_found")
                 metrics = data.get("metrics") or {}

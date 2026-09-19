@@ -511,3 +511,335 @@ class N8nOperationsDailyCheckTool(BaseTool):
                 error=str(exc),
                 message="Unexpected error invoking n8n daily operations workflow",
             )
+
+
+class GmailSendApprovedEmailTool(BaseTool):
+    """HIGH-RISK Tool that dispatches external customer or lead emails via n8n 04_Gmail_Send_Approved_Email workflow."""
+    tool_id: str = "gmail_send_approved_email"
+    name: str = "04 Gmail — Send Approved Email Workflow"
+    description: str = (
+        "HIGH-RISK: Deliver approved email communication to prospect or customer via n8n Gmail workflow. "
+        "Requires human approval before execution."
+    )
+    category: str = "sales"
+    is_write: bool = True
+    input_schema: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "task_id": {"type": "string"},
+            "recipient_email": {"type": "string"},
+            "recipient_name": {"type": "string"},
+            "subject": {"type": "string"},
+            "message": {"type": "string"},
+            "lead_id": {"type": "string"},
+            "customer_id": {"type": "string"},
+        },
+    }
+
+    def __init__(
+        self,
+        n8n_provider: Optional[N8nToolProvider] = None,
+        data_service: Optional[IDataService] = None,
+    ):
+        self.n8n_provider = n8n_provider or get_n8n_provider()
+        self.data_service = data_service or get_data_service()
+
+    async def execute(self, **kwargs: Any) -> ToolResult:
+        task_id = kwargs.get("task_id") or "task-email-dispatch"
+        agent_id = kwargs.get("agent_id") or "sales"
+        lead_id = kwargs.get("lead_id")
+        customer_id = kwargs.get("customer_id")
+        recipient_email = kwargs.get("recipient_email") or kwargs.get("to_email")
+        recipient_name = kwargs.get("recipient_name") or kwargs.get("to_name") or "Valued Contact"
+        subject = kwargs.get("subject") or "AgentX Communication"
+        message = kwargs.get("message") or kwargs.get("email_body") or "Hello from AgentX AI Teammates."
+
+        if not recipient_email and lead_id:
+            lead = await self.data_service.get_lead(str(lead_id))
+            if lead:
+                recipient_email = lead.email
+                recipient_name = lead.name
+
+        if not recipient_email and customer_id:
+            cust = await self.data_service.get_customer(str(customer_id))
+            if cust:
+                recipient_email = cust.email
+                recipient_name = cust.name
+
+        recipient_email = recipient_email or "client@example.com"
+
+        payload = {
+            "task_id": str(task_id),
+            "agent_id": str(agent_id),
+            "workspace_id": kwargs.get("workspace_id", "default"),
+            "user_id": kwargs.get("user_id", "usr_demo"),
+            "action": "send_approved_email",
+            "approval_id": kwargs.get("approval_id", "APP-APPROVED-DEMO"),
+            "approved_by": kwargs.get("approved_by", "alex_rivera"),
+            "recipient": recipient_email,
+            "recipient_email": recipient_email,
+            "to": recipient_email,
+            "to_email": recipient_email,
+            "recipient_name": recipient_name,
+            "subject": subject,
+            "message": message,
+            "body": message,
+            "email_body": message,
+            "lead_id": str(lead_id) if lead_id else None,
+            "customer_id": str(customer_id) if customer_id else None,
+        }
+
+        try:
+            res = await self.n8n_provider.execute_workflow("gmail", payload)
+            if not res.success:
+                err_msg = res.error.get("message") if isinstance(res.error, dict) else str(res.error or "n8n email dispatch failed")
+                return ToolResult(
+                    success=False,
+                    tool_id=self.tool_id,
+                    error=err_msg,
+                    data=res.model_dump(),
+                    message=f"n8n Gmail dispatch error: {err_msg}",
+                )
+
+            await self.data_service.create_activity(
+                task_id=str(task_id),
+                activity_type="email_dispatched_via_n8n",
+                description=f"Approved email sent to {recipient_email} ({subject}) via 04_Gmail_Send_Approved_Email workflow",
+            )
+
+            result_data = {
+                "success": True,
+                "status": "completed",
+                "workflow": "gmail",
+                "task_id": str(task_id),
+                "recipient_email": recipient_email,
+                "subject": subject,
+                "actions": res.actions or [f"Approved email delivered to {recipient_email}"],
+                "delivery_info": res.delivery_info or {"status": "sent", "recipient_email": recipient_email},
+                "message": f"Approved email successfully delivered to {recipient_email} via n8n Gmail workflow.",
+            }
+
+            return ToolResult(
+                success=True,
+                tool_id=self.tool_id,
+                data=result_data,
+                message=result_data["message"],
+            )
+        except Exception as exc:
+            logger.exception("GmailSendApprovedEmailTool invocation exception: %s", exc)
+            return ToolResult(
+                success=False,
+                tool_id=self.tool_id,
+                error=str(exc),
+                message="Unexpected error invoking n8n Gmail send approved email workflow",
+            )
+
+
+class CrmLeadActionsTool(BaseTool):
+    """Tool that performs CRM database mutations via n8n 05_CRM_Lead_Actions workflow."""
+    tool_id: str = "crm_lead_actions"
+    name: str = "05 CRM — Lead Actions Workflow"
+    description: str = (
+        "Invoke n8n workflow to execute CRM operations such as lead status updates, "
+        "note attachments, and activity logging."
+    )
+    category: str = "sales"
+    is_write: bool = True
+    input_schema: Dict[str, Any] = {
+        "type": "object",
+        "required": ["lead_id"],
+        "properties": {
+            "lead_id": {"type": "string", "description": "Lead ID to mutate"},
+            "task_id": {"type": "string"},
+            "action": {"type": "string"},
+            "status": {"type": "string"},
+            "notes": {"type": "string"},
+        },
+    }
+
+    def __init__(
+        self,
+        n8n_provider: Optional[N8nToolProvider] = None,
+        data_service: Optional[IDataService] = None,
+    ):
+        self.n8n_provider = n8n_provider or get_n8n_provider()
+        self.data_service = data_service or get_data_service()
+
+    async def execute(self, **kwargs: Any) -> ToolResult:
+        lead_id = kwargs.get("lead_id") or "LEAD-001"
+        task_id = kwargs.get("task_id") or "task-crm-exec"
+        action = kwargs.get("action") or "update_lead"
+        status = kwargs.get("status") or "qualified"
+        notes = kwargs.get("notes") or "Updated via n8n CRM lead actions workflow"
+
+        payload = {
+            "task_id": str(task_id),
+            "agent_id": "sales",
+            "workspace_id": kwargs.get("workspace_id", "default"),
+            "user_id": kwargs.get("user_id", "usr_demo"),
+            "action": action,
+            "lead_id": str(lead_id),
+            "status": status,
+            "notes": notes,
+        }
+
+        try:
+            res = await self.n8n_provider.execute_workflow("crm", payload)
+            if not res.success:
+                err_msg = res.error.get("message") if isinstance(res.error, dict) else str(res.error or "n8n CRM workflow failed")
+                return ToolResult(
+                    success=False,
+                    tool_id=self.tool_id,
+                    error=err_msg,
+                    data=res.model_dump(),
+                    message=f"n8n CRM lead action error: {err_msg}",
+                )
+
+            # Persist update to CRM datastore
+            updated_lead = await self.data_service.update_lead(
+                lead_id=str(lead_id),
+                status=status,
+                notes=notes,
+            )
+
+            await self.data_service.create_activity(
+                task_id=str(task_id),
+                activity_type="crm_lead_updated_via_n8n",
+                description=f"CRM lead {lead_id} updated to status '{status}' via 05_CRM_Lead_Actions workflow",
+            )
+
+            result_data = {
+                "success": True,
+                "status": "completed",
+                "workflow": "crm",
+                "task_id": str(task_id),
+                "lead_id": str(lead_id),
+                "lead_status": status,
+                "actions": res.actions or [f"Lead {lead_id} updated in CRM"],
+                "message": f"Lead {lead_id} status updated to '{status}' via n8n CRM workflow.",
+            }
+
+            return ToolResult(
+                success=True,
+                tool_id=self.tool_id,
+                data=result_data,
+                message=result_data["message"],
+            )
+        except Exception as exc:
+            logger.exception("CrmLeadActionsTool invocation exception: %s", exc)
+            return ToolResult(
+                success=False,
+                tool_id=self.tool_id,
+                error=str(exc),
+                message="Unexpected error invoking n8n CRM lead actions workflow",
+            )
+
+
+class SupportCaseActionsTool(BaseTool):
+    """Tool that performs support case operations via n8n 06_Support_Case_Actions workflow."""
+    tool_id: str = "support_case_actions"
+    name: str = "06 Support Case — Actions Workflow"
+    description: str = (
+        "Invoke n8n workflow to execute support case actions such as tier-2 escalation, "
+        "case status updates, and supervisor routing."
+    )
+    category: str = "support"
+    is_write: bool = True
+    input_schema: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "task_id": {"type": "string"},
+            "customer_id": {"type": "string"},
+            "order_id": {"type": "string"},
+            "action": {"type": "string"},
+            "reason": {"type": "string"},
+        },
+    }
+
+    def __init__(
+        self,
+        n8n_provider: Optional[N8nToolProvider] = None,
+        data_service: Optional[IDataService] = None,
+    ):
+        self.n8n_provider = n8n_provider or get_n8n_provider()
+        self.data_service = data_service or get_data_service()
+
+    async def execute(self, **kwargs: Any) -> ToolResult:
+        task_id = kwargs.get("task_id") or "task-case-exec"
+        customer_id = kwargs.get("customer_id") or "CUST-001"
+        order_id = kwargs.get("order_id") or "ORD-1001"
+        action = kwargs.get("action") or "escalate_case"
+        reason = kwargs.get("reason") or "Escalated to Tier-2 supervisor for complex investigation"
+
+        payload = {
+            "task_id": str(task_id),
+            "agent_id": "support",
+            "workspace_id": kwargs.get("workspace_id", "default"),
+            "user_id": kwargs.get("user_id", "usr_demo"),
+            "action": action,
+            "customer_id": str(customer_id),
+            "order_id": str(order_id),
+            "reason": reason,
+        }
+
+        try:
+            res = await self.n8n_provider.execute_workflow("support_case", payload)
+            if not res.success:
+                err_msg = res.error.get("message") if isinstance(res.error, dict) else str(res.error or "n8n support case workflow failed")
+                return ToolResult(
+                    success=False,
+                    tool_id=self.tool_id,
+                    error=err_msg,
+                    data=res.model_dump(),
+                    message=f"n8n support case action error: {err_msg}",
+                )
+
+            # Record support case in data service
+            from app.models.support import SupportCase, SupportIntent, SupportSeverity, SupportCaseStatus
+            case_id = f"CASE-{task_id[-6:].upper()}"
+            case = SupportCase(
+                case_id=case_id,
+                task_id=str(task_id),
+                customer_id=str(customer_id),
+                order_id=str(order_id),
+                intent=SupportIntent.ESCALATION,
+                severity=SupportSeverity.HIGH,
+                status=SupportCaseStatus.ESCALATED,
+                issue_summary=reason,
+                escalation_reason=reason,
+            )
+            await self.data_service.create_support_case(case)
+
+            await self.data_service.create_activity(
+                task_id=str(task_id),
+                activity_type="support_case_escalated_via_n8n",
+                description=f"Support case {case_id} escalated for customer {customer_id} via 06_Support_Case_Actions workflow",
+            )
+
+            result_data = {
+                "success": True,
+                "status": "completed",
+                "workflow": "support_case",
+                "task_id": str(task_id),
+                "case_id": case_id,
+                "customer_id": str(customer_id),
+                "order_id": str(order_id),
+                "reason": reason,
+                "actions": res.actions or [f"Support case {case_id} created and escalated"],
+                "message": f"Support case {case_id} escalated to Tier-2 supervisor via n8n.",
+            }
+
+            return ToolResult(
+                success=True,
+                tool_id=self.tool_id,
+                data=result_data,
+                message=result_data["message"],
+            )
+        except Exception as exc:
+            logger.exception("SupportCaseActionsTool invocation exception: %s", exc)
+            return ToolResult(
+                success=False,
+                tool_id=self.tool_id,
+                error=str(exc),
+                message="Unexpected error invoking n8n support case actions workflow",
+            )

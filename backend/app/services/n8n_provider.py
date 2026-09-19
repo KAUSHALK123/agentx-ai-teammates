@@ -57,36 +57,43 @@ class N8nToolProvider:
         return None
 
     async def check_health(self) -> Dict[str, Any]:
-        """Check availability of the local n8n instance."""
-        url = f"{self.base_url}/healthz"
+        """Check availability of the local or cloud n8n instance."""
         headers = {}
         if self.api_key:
             headers["X-N8N-API-KEY"] = self.api_key
 
-        try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                res = await client.get(url, headers=headers)
-                available = res.status_code == 200
-                return {
-                    "available": available,
-                    "base_url": self.base_url,
-                    "configured": True,
-                    "status_code": res.status_code,
-                    "registered_workflows": list(APPROVED_N8N_WORKFLOWS.keys()),
-                }
-        except Exception as exc:
-            if "localhost" in self.base_url:
-                alt = await self._discover_fallback_port()
-                if alt:
-                    return await self.check_health()
-            logger.warning("n8n health check failed: %s", exc)
-            return {
-                "available": False,
-                "base_url": self.base_url,
-                "configured": True,
-                "error": str(exc),
-                "registered_workflows": list(APPROVED_N8N_WORKFLOWS.keys()),
-            }
+        test_urls = [f"{self.base_url}/healthz", f"{self.base_url}/"]
+        sales_url = self.resolve_webhook_url("sales")
+        if sales_url:
+            test_urls.append(sales_url)
+
+        for target_url in test_urls:
+            try:
+                async with httpx.AsyncClient(timeout=3.0) as client:
+                    res = await client.get(target_url, headers=headers)
+                    if res.status_code in (200, 401, 404, 405):
+                        return {
+                            "available": True,
+                            "base_url": self.base_url,
+                            "configured": True,
+                            "status_code": res.status_code,
+                            "registered_workflows": list(APPROVED_N8N_WORKFLOWS.keys()),
+                        }
+            except Exception:
+                pass
+
+        if "localhost" in self.base_url or "127.0.0.1" in self.base_url:
+            alt = await self._discover_fallback_port()
+            if alt:
+                return await self.check_health()
+
+        return {
+            "available": False,
+            "base_url": self.base_url,
+            "configured": True,
+            "error": f"Unable to reach n8n at {self.base_url}",
+            "registered_workflows": list(APPROVED_N8N_WORKFLOWS.keys()),
+        }
 
     def resolve_webhook_url(self, workflow_type: str) -> Optional[str]:
         """Centrally map workflow type to environment variable URL or default base endpoint."""
@@ -98,11 +105,11 @@ class N8nToolProvider:
             return settings.n8n_support_webhook_url or f"{self.base_url}/webhook/agentx-support-handle-issue"
         elif wf in ("operations", "operations_daily_business_check", "operations_daily_check", "03_operations_daily_check"):
             return settings.n8n_operations_webhook_url or f"{self.base_url}/webhook/agentx-operations-daily-check"
-        elif wf in ("sales_send_followup", "gmail", "gmail_send_approved_email", "agentx-gmail-send-approved-email"):
+        elif wf in ("gmail", "gmail_send_approved_email", "04_gmail_send_approved_email", "sales_send_followup", "send_customer_email", "agentx-gmail-send-approved-email"):
             return settings.n8n_gmail_webhook_url or f"{self.base_url}/webhook/agentx-gmail-send-approved-email"
-        elif wf in ("crm", "crm_lead_actions", "agentx-crm-lead-actions"):
+        elif wf in ("crm", "crm_lead_actions", "05_crm_lead_actions", "update_lead", "agentx-crm-lead-actions"):
             return settings.n8n_crm_webhook_url or f"{self.base_url}/webhook/agentx-crm-lead-actions"
-        elif wf in ("support_case", "support_case_actions", "agentx-support-case-actions"):
+        elif wf in ("support_case", "support_case_actions", "06_support_case_actions", "escalate_case", "update_support_case", "agentx-support-case-actions"):
             return settings.n8n_support_case_webhook_url or f"{self.base_url}/webhook/agentx-support-case-actions"
         return None
 
@@ -114,6 +121,12 @@ class N8nToolProvider:
         Returns normalized N8nExecutionResult with structured error codes on failure.
         """
         body = payload.model_dump() if hasattr(payload, "model_dump") else (payload if isinstance(payload, dict) else {})
+        if not body.get("action"):
+            body["action"] = body.get("requested_action") or "process_lead"
+        if not body.get("requested_action"):
+            body["requested_action"] = body.get("action")
+        if not body.get("check_type"):
+            body["check_type"] = "daily"
 
         # Idempotency Check
         task_id = body.get("task_id") or "task_general"
@@ -299,7 +312,8 @@ class N8nToolProvider:
             )
 
         # 2. Agent Authorization Check
-        if payload.agent_id != wf_def.allowed_agent:
+        allowed_agents = [a.strip().lower() for a in wf_def.allowed_agent.split(",")]
+        if payload.agent_id.lower() not in allowed_agents:
             logger.error(
                 "Agent '%s' is not authorized to invoke workflow '%s' (allowed: '%s')",
                 payload.agent_id,

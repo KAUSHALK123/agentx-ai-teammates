@@ -535,6 +535,9 @@ def initialize_default_tools() -> None:
         N8nSupportHandleIssueTool,
         N8nSendFollowupTool,
         N8nOperationsDailyCheckTool,
+        GmailSendApprovedEmailTool,
+        CrmLeadActionsTool,
+        SupportCaseActionsTool,
     )
     from app.tools.knowledge_tools import LookupKnowledgeTool
 
@@ -558,6 +561,9 @@ def initialize_default_tools() -> None:
         N8nSendFollowupTool(),
         N8nOperationsDailyCheckTool(),
         LookupKnowledgeTool(),
+        GmailSendApprovedEmailTool(),
+        CrmLeadActionsTool(),
+        SupportCaseActionsTool(),
     ]
     for tool in tools:
         if not registry.has_tool(tool.tool_id):

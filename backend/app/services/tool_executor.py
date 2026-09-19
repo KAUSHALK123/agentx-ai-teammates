@@ -41,6 +41,10 @@ class ToolExecutionService:
             "escalate_support_case",
             "support_handle_issue",
             "n8n_support_handle_issue",
+            "gmail_send_approved_email",
+            "send_customer_email",
+            "support_case_actions",
+            "n8n_support_case_actions",
         },
         AgentType.SALES.value: {
             "lookup_customer",
@@ -51,6 +55,9 @@ class ToolExecutionService:
             "sales_process_lead",
             "n8n_process_lead",
             "n8n_send_followup",
+            "gmail_send_approved_email",
+            "crm_lead_actions",
+            "n8n_crm_lead_actions",
         },
         AgentType.OPERATIONS.value: {
             "get_business_data",
@@ -58,6 +65,7 @@ class ToolExecutionService:
             "lookup_knowledge",
             "create_activity",
             "n8n_operations_check",
+            "operations_daily_check",
         },
     }
 

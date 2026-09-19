@@ -30,6 +30,8 @@ class ApprovalPolicyService:
     HIGH_RISK_TOOLS = {
         "send_email",
         "send_sms",
+        "send_customer_email",
+        "gmail_send_approved_email",
         "issue_refund",
         "issue_demo_refund",
         "cancel_order",

@@ -76,6 +76,7 @@ async def root():
         "status": "operational",
         "docs_url": "/docs",
         "health_url": "/health",
+        "n8n_health_url": "/health/n8n",
         "tasks_url": "/tasks",
         "agents_url": "/agents",
         "tools_url": "/tools",
