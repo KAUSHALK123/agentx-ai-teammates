@@ -44,6 +44,7 @@ class ToolExecutionService:
             "lookup_lead",
             "update_lead",
             "create_activity",
+            "sales_process_lead",
             "n8n_process_lead",
             "n8n_send_followup",
         },

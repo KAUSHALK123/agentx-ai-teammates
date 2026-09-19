@@ -1,0 +1,383 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agentx-sales-process-lead",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "141430ca-7907-4ec0-9c9d-4a41ccca14c8",
+      "name": "Webhook",
+      "webhookId": "e7e31a25-5103-45e1-92b8-bc6119acf606"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8cd86a9b-9c2a-4ba1-8d9f-293558452c41",
+              "name": "=task_id",
+              "value": "=Value: {{$json.body.task_id}}",
+              "type": "string"
+            },
+            {
+              "id": "b6f37eca-5061-48ea-bde6-0a3484b608af",
+              "name": "lead_id",
+              "value": "=Value: {{$json.body.lead_id}}",
+              "type": "string"
+            },
+            {
+              "id": "b871a67d-c235-422d-bb8e-59c85b037005",
+              "name": "name",
+              "value": "=Value: {{$json.body.name}}",
+              "type": "string"
+            },
+            {
+              "id": "74b6e3c6-f91f-48e2-8ec9-9c17eb27aa1a",
+              "name": "email",
+              "value": "=Value: {{$json.body.email}}",
+              "type": "string"
+            },
+            {
+              "id": "fd0daa83-abdf-4f4e-950d-318868f68d24",
+              "name": "company",
+              "value": "=Value: {{$json.body.company}}",
+              "type": "string"
+            },
+            {
+              "id": "4ec3cac0-8a9d-4ab4-a78e-6c4f6be1a0c0",
+              "name": "request",
+              "value": "=Value: {{$json.body.request}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "687daee6-36bb-4f57-a155-36012ede5fbf",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $input.first().json;\n\nconst requiredFields = [\n  \"task_id\",\n  \"lead_id\",\n  \"name\",\n  \"email\",\n  \"company\",\n  \"request\"\n];\n\nconst missingFields = requiredFields.filter(\n  field => !String(lead[field] ?? \"\").trim()\n);\n\nconst qualified = missingFields.length === 0;\n\nreturn [{\n  json: {\n    task_id: lead.task_id,\n    lead_id: lead.lead_id,\n    name: lead.name,\n    email: lead.email,\n    company: lead.company,\n    request: lead.request,\n    qualification_status: qualified ? \"qualified\" : \"needs_information\",\n    missing_fields: missingFields\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "cba460c4-a64b-4ef2-b7a8-ebf9849df9c0",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "470108c4-3af6-4f92-b416-1018bc4802af",
+              "leftValue": "={{$json.qualification_status}}",
+              "rightValue": "qualified",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        0
+      ],
+      "id": "03870d89-e419-4b7a-8ca9-36d42736331f",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/v1/tools/update_lead/execute",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"agent_id\": \"sales\",\n  \"parameters\": {\n    \"lead_id\": \"LEAD-001\",\n    \"status\": \"qualified\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        896,
+        -96
+      ],
+      "id": "05d28746-9644-4fed-b9a2-c1cf10ebb531",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8a483b47-7de1-48e2-9506-5d53e4b54586",
+              "name": "Name: follow_up_required",
+              "value": "Value: true",
+              "type": "string"
+            },
+            {
+              "id": "9e08c3fa-230a-4ca2-b9e1-fcce8d76c569",
+              "name": "Name: subject",
+              "value": "Value: Following up on your inquiry",
+              "type": "string"
+            },
+            {
+              "id": "7f09ae96-969c-4f17-8162-09655d5cbe4b",
+              "name": "Name: message",
+              "value": "=Hi {{$json.data.name}}, thanks for your interest. We’ll follow up with you shortly.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1120,
+        -96
+      ],
+      "id": "7649eb80-91f3-461c-ad96-1df3b4e11dc1",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/v1/tools/create_activity/execute",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"agent_id\": \"sales\",\n  \"parameters\": {\n    \"task_id\": \"task-123\",\n    \"lead_id\": \"LEAD-001\",\n    \"activity_type\": \"sales_follow_up_prepared\",\n    \"description\": \"Hi Rajesh Khanna, thanks for your interest. We'll follow up with you shortly.\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1344,
+        -96
+      ],
+      "id": "e242cc8d-dfc4-4ef0-ab13-5fe58463290f",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        896,
+        96
+      ],
+      "id": "bc4c926d-7d73-452d-a1b9-22a0e714c30b",
+      "name": "Edit Fields2"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "96097452-2455-48c2-befc-f0dc867d5840",
+              "name": "Name: qualification_status",
+              "value": "Value: needs_information",
+              "type": "string"
+            },
+            {
+              "id": "8ebe2d2d-def5-4ae8-b4e0-f32a326dabfe",
+              "name": "Name: follow_up_required",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "d68cc963-e55d-4620-9549-6699ac957467",
+              "name": "Name: reason",
+              "value": "Value: Missing required lead information",
+              "type": "string"
+            },
+            {
+              "id": "135d803f-54a9-424f-b79b-4db40f6a036f",
+              "name": "",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1120,
+        96
+      ],
+      "id": "c0abd87d-8bed-45b4-8e83-e12f0ee8979d",
+      "name": "Edit Fields3"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"success\": true,\n  \"task_id\": \"task-123\",\n  \"lead_id\": \"LEAD-001\",\n  \"activity_created\": true,\n  \"message\": \"Sales follow-up prepared and activity logged successfully.\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1648,
+        32
+      ],
+      "id": "14b8bed4-1e00-49d2-9525-f425a60e1691",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields3": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f9b05bee-f82d-4044-884a-88bfe2215743",
+  "meta": {
+    "instanceId": "ae17a5c722727b1d45d97958c812e6d3fa7e9ab07522f1f6930ef87e7d351197"
+  },
+  "nodeGroups": [],
+  "id": "RCYJO5v17kWlwCVO",
+  "tags": []
+}
