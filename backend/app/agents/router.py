@@ -116,8 +116,8 @@ class AgentRouter:
         system_prompt = (
             "You are the AgentX Intelligent Router. Analyze the business request and route it to ONE teammate:\n"
             "- 'support': customer complaints, refunds, order tracking, payment disputes, support tickets\n"
-            "- 'sales': leads, commercial quotes, enterprise contracts, pricing inquiries, CRM follow-ups\n"
-            "- 'operations': warehouse inventory, reports, data audits, logistics, stock anomalies\n\n"
+            "- 'sales': sales leads, new prospect outreach, commercial quotes, enterprise contracts, pricing inquiries, CRM leads\n"
+            "- 'operations': warehouse inventory, business records, data audits, logistics, daily business checks, operational reports, data anomalies\n\n"
             "If the request is totally incomprehensible or not a business task, respond with category 'ambiguous'.\n"
             "Output strictly in format:\n"
             "CATEGORY: <support|sales|operations|ambiguous>\n"

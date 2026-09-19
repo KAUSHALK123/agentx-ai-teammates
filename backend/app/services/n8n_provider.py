@@ -98,8 +98,12 @@ class N8nToolProvider:
             return settings.n8n_support_webhook_url or f"{self.base_url}/webhook/agentx-support-handle-issue"
         elif wf in ("operations", "operations_daily_business_check", "operations_daily_check", "03_operations_daily_check"):
             return settings.n8n_operations_webhook_url or f"{self.base_url}/webhook/agentx-operations-daily-check"
-        elif wf == "sales_send_followup":
-            return f"{self.base_url}/webhook/agentx-sales-send-followup"
+        elif wf in ("sales_send_followup", "gmail", "gmail_send_approved_email", "agentx-gmail-send-approved-email"):
+            return settings.n8n_gmail_webhook_url or f"{self.base_url}/webhook/agentx-gmail-send-approved-email"
+        elif wf in ("crm", "crm_lead_actions", "agentx-crm-lead-actions"):
+            return settings.n8n_crm_webhook_url or f"{self.base_url}/webhook/agentx-crm-lead-actions"
+        elif wf in ("support_case", "support_case_actions", "agentx-support-case-actions"):
+            return settings.n8n_support_case_webhook_url or f"{self.base_url}/webhook/agentx-support-case-actions"
         return None
 
     async def execute_workflow(self, workflow_type: str, payload: Any) -> N8nExecutionResult:
