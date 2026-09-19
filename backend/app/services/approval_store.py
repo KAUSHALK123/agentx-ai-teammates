@@ -42,6 +42,34 @@ class InMemoryApprovalStore(BaseApprovalStore):
     def __init__(self):
         self._approvals: Dict[str, ApprovalRecord] = {}
         self._lock = asyncio.Lock()
+        self._seed_demo_approvals()
+
+    def _seed_demo_approvals(self) -> None:
+        """Seed initial backward-compatible demo approval requests."""
+        from app.models.approval import RiskLevel
+        demo_appr = ApprovalRecord(
+            approval_id="APP-1029",
+            task_id="TASK-9042",
+            step_id=6,
+            agent_id="support",
+            workspace_id="ws_default",
+            requested_by="usr_demo_owner",
+            action="Send apology email and issue $25 store voucher to Kaushal",
+            tool_id="gmail_send_approved_email",
+            risk_level=RiskLevel.HIGH,
+            reason="Action involves issuing store credit and sending an external response to customer.",
+            proposed_input={
+                "recipient_email": "k8849819@gmail.com",
+                "recipient_name": "Kaushal",
+                "subject": "Apology regarding Order #ORD-8821 + Free Reshipment Update",
+                "message": "Dear Kaushal, We deeply apologize for the missing item in your recent order. A complimentary reshipment has been dispatched along with voucher code AGX-KAUSHAL25.",
+                "order_id": "ORD-8821",
+                "customer_email": "k8849819@gmail.com",
+                "voucherCode": "AGX-KAUSHAL25"
+            },
+            status=ApprovalStatus.PENDING,
+        )
+        self._approvals[demo_appr.approval_id] = demo_appr
 
     async def save_approval(self, approval: ApprovalRecord) -> ApprovalRecord:
         async with self._lock:

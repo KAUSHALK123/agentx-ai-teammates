@@ -1,7 +1,7 @@
 import asyncio
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
-from app.models.task import Task
+from app.models.task import Task, TaskStatus
 
 
 class BaseTaskStore(ABC):
@@ -37,6 +37,31 @@ class InMemoryTaskStore(BaseTaskStore):
     def __init__(self):
         self._tasks: Dict[str, Task] = {}
         self._lock = asyncio.Lock()
+        self._seed_demo_tasks()
+
+    def _seed_demo_tasks(self) -> None:
+        """Seed initial backward-compatible demo tasks."""
+        demo_task = Task(
+            task_id="TASK-9042",
+            user_request="Customer Kaushal (k8849819@gmail.com) reported high dissatisfaction with order #ORD-8821. Package delivered late and 1 item missing.",
+            selected_agent=None,
+            agent_id="support",
+            workspace_id="ws_default",
+            created_by="usr_demo_owner",
+            status=TaskStatus.WAITING_FOR_APPROVAL,
+            approval_required=True,
+            current_approval_id="APP-1029",
+            result={
+                "task_id": "TASK-9042",
+                "customer": "CUST-001",
+                "customer_name": "Kaushal",
+                "customer_email": "k8849819@gmail.com",
+                "order_id": "ORD-8821",
+                "issue": "Shipping Delay & Missing Item",
+                "summary": "Task awaiting manager sign-off to execute final email response to Kaushal (k8849819@gmail.com)."
+            }
+        )
+        self._tasks[demo_task.task_id] = demo_task
 
     async def save_task(self, task: Task) -> Task:
         async with self._lock:
