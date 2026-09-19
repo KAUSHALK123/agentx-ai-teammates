@@ -61,6 +61,7 @@ export interface TaskItem {
   supportReview?: SupportReviewData;
   filesAttached?: { name: string; size: string; type: string }[];
   resultSummary?: string;
+  knowledgeUsed?: { source: string; query?: string; score?: number; content?: string }[];
   verificationReport?: {
     verified: boolean;
     criteriaChecked: string[];

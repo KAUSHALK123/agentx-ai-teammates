@@ -17,7 +17,8 @@ import {
   X,
   AlertTriangle,
   ListChecks,
-  AlertCircle
+  AlertCircle,
+  BookOpen
 } from 'lucide-react';
 import { tasksApi } from '../../api';
 
@@ -412,6 +413,43 @@ export const TaskExecutionView: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Business Knowledge Evidence (Cognee) */}
+      {task.knowledgeUsed && task.knowledgeUsed.length > 0 && (
+        <div className="glass-card p-6 rounded-2xl border border-indigo-200 bg-indigo-50/40 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-indigo-950 flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-indigo-600" />
+              <span>Business Knowledge Evidence (Powered by Cognee)</span>
+            </h3>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+              {task.knowledgeUsed.length} Policy Documents Applied
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {task.knowledgeUsed.map((k, idx) => (
+              <div key={idx} className="p-3.5 bg-white rounded-xl border border-indigo-100 text-xs space-y-1 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 text-[11px]">
+                    {k.source}
+                  </span>
+                  {typeof k.score === 'number' && (
+                    <span className="text-[10px] font-mono text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      Relevance: {(k.score * 100).toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+                {k.content && (
+                  <p className="text-slate-700 text-[11px] leading-relaxed font-medium pt-1 italic">
+                    "{k.content.slice(0, 200)}{k.content.length > 200 ? '...' : ''}"
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}

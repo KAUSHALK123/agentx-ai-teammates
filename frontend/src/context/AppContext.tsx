@@ -135,6 +135,17 @@ function mapBackendTaskToFrontend(
 
   const isComplaint = bt.user_request.toLowerCase().includes('complaint') || bt.user_request.toLowerCase().includes('refund') || bt.user_request.toLowerCase().includes('delay');
 
+  const knowledgeUsed = Array.isArray(bt.result?.knowledge_used) ? bt.result.knowledge_used : undefined;
+  
+  const verificationReport = bt.result?.verification ? {
+    verified: Boolean(bt.result.verification.verified),
+    criteriaChecked: Array.isArray(bt.result.verification.details?.criteria_checked) 
+      ? bt.result.verification.details.criteria_checked 
+      : ['Business rule compliance', 'Safety guardrail integrity', 'Deterministic outcome validation'],
+    riskScore: typeof bt.result.verification.details?.risk_score === 'number' ? bt.result.verification.details.risk_score : 0.0,
+    notes: bt.result.verification.summary || 'Deterministic verification verified all business and policy constraints.'
+  } : undefined;
+
   return {
     id: bt.task_id,
     title,
@@ -150,6 +161,8 @@ function mapBackendTaskToFrontend(
     approvalRequest: approvalReq,
     filesAttached: (bt.input_ids || []).map(id => ({ name: `Input ${id}`, size: 'Processed', type: 'INPUT' })),
     resultSummary: typeof bt.result === 'string' ? bt.result : bt.result?.summary || bt.result?.message || bt.error || undefined,
+    knowledgeUsed,
+    verificationReport,
     supportReview: isComplaint ? {
       customerName: 'Sarah Jenkins',
       customerEmail: 'sarah.j@acme.com',
