@@ -412,6 +412,9 @@ class TaskExecutionEngine:
         if not verification.verified:
             task.error = verification.summary
 
+        if "knowledge_used" in context.variables and task.result:
+            task.result["knowledge_used"] = context.variables["knowledge_used"]
+
         task.add_event(
             stage=final_status,
             action=f"Task lifecycle reached terminal state: {final_status.value}",
@@ -715,6 +718,10 @@ class TaskExecutionEngine:
             if "expected_fields" not in params:
                 params["expected_fields"] = {"status": "matched"}
 
+        elif tool_id == "lookup_knowledge":
+            params["query"] = params.get("query") or user_request
+            params["limit"] = params.get("limit") or 3
+
         elif tool_id == "create_activity":
             params["task_id"] = context.task_id
             if "activity_type" not in params:
@@ -857,6 +864,10 @@ class TaskExecutionEngine:
         elif tool_id == "create_activity":
             if data.get("activity_id"):
                 context.variables["activity_id"] = data["activity_id"]
+
+        elif tool_id == "lookup_knowledge":
+            if data.get("knowledge_used"):
+                context.variables["knowledge_used"] = data["knowledge_used"]
 
     async def _execute_tool_with_retry(
         self,

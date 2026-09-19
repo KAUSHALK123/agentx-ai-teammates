@@ -34,6 +34,7 @@ class ToolExecutionService:
             "lookup_customer",
             "lookup_order",
             "lookup_transaction",
+            "lookup_knowledge",
             "create_activity",
             "prepare_customer_response",
             "issue_demo_refund",
@@ -45,6 +46,7 @@ class ToolExecutionService:
             "lookup_customer",
             "lookup_lead",
             "update_lead",
+            "lookup_knowledge",
             "create_activity",
             "sales_process_lead",
             "n8n_process_lead",
@@ -53,6 +55,7 @@ class ToolExecutionService:
         AgentType.OPERATIONS.value: {
             "get_business_data",
             "verify_record",
+            "lookup_knowledge",
             "create_activity",
             "n8n_operations_check",
         },

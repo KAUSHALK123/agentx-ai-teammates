@@ -199,15 +199,15 @@ export const GothicGateEntrance: React.FC<GothicGateEntranceProps> = ({ onEnterC
         >
           {/* Title: AGENTX */}
           <h1 
-            className="text-6xl sm:text-7xl md:text-9xl font-bold tracking-widest text-slate-100 drop-shadow-[0_10px_30px_rgba(0,0,0,0.95)]"
-            style={{ fontFamily: "'Cinzel Decorative', 'Cinzel', serif" }}
+            className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-extrabold tracking-[0.15em] sm:tracking-[0.2em] text-slate-100 drop-shadow-[0_12px_35px_rgba(0,0,0,0.98)] select-none px-4"
+            style={{ fontFamily: "'Cinzel', serif" }}
           >
-            AGENT<span className="text-red-600 drop-shadow-[0_0_35px_#ff1e38] animate-pulse">X</span>
+            <span>AGENT</span><span className="text-red-600 drop-shadow-[0_0_35px_#ff1e38] animate-pulse inline-block ml-1">X</span>
           </h1>
 
           {/* Subtitle */}
           <p 
-            className="text-xs sm:text-sm md:text-base font-semibold tracking-[0.35em] text-red-200/90 uppercase mt-2 mb-8 drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]"
+            className="text-xs sm:text-sm md:text-base font-semibold tracking-[0.25em] sm:tracking-[0.35em] text-red-200/90 uppercase mt-3 mb-8 drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] px-2"
             style={{ fontFamily: "'Cinzel', serif" }}
           >
             ENTER A HIGHER INTELLIGENCE

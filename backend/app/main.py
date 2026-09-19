@@ -11,6 +11,7 @@ from app.api.v1.approvals import router as approvals_router
 from app.api.v1.support import router as support_router
 from app.api.v1.integrations import router as integrations_router
 from app.api.v1.inputs import router as inputs_router
+from app.api.v1.knowledge import router as knowledge_router
 from app.api.v1 import api_v1_router
 from app.config.settings import get_settings
 
@@ -59,6 +60,7 @@ app.include_router(approvals_router, prefix="/approvals", tags=["Approvals"])
 app.include_router(support_router, prefix="/support", tags=["Support"])
 app.include_router(integrations_router, prefix="/integrations", tags=["Integrations"])
 app.include_router(inputs_router, prefix="/inputs", tags=["Inputs"])
+app.include_router(knowledge_router, prefix="/knowledge", tags=["Knowledge"])
 
 # Also mount under /api/v1 prefix
 app.include_router(api_v1_router, prefix="/api/v1")

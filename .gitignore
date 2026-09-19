@@ -66,3 +66,7 @@ out/
 # Uploaded business files & storage
 data/
 data/uploads/
+.cognee_data/
+cognee_data/
+*.db
+!data/demo/*.db

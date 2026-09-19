@@ -1,6 +1,7 @@
 [
   {
     "name": "AgentX - Sales Process Lead",
+    "active": true,
     "nodes": [
       {
         "parameters": {
@@ -13,18 +14,68 @@
         "name": "Webhook Trigger",
         "type": "n8n-nodes-base.webhook",
         "typeVersion": 2,
-        "position": [220, 300],
+        "position": [100, 300],
         "webhookId": "agentx-sales-process-lead-hook"
       },
       {
         "parameters": {
-          "jsCode": "const body = $input.item.json.body || $input.item.json;\nconst leadId = body.lead_id || 'LEAD-001';\nconst ctx = body.context || {};\nconst leadName = ctx.lead_name || ctx.name || 'Valued Prospect';\nconst company = ctx.company || 'Enterprise Partner';\nconst source = ctx.source || 'inbound_enterprise';\nconst notes = ctx.notes || '';\n\n// Qualification logic\nconst isEnterprise = source.includes('enterprise') || notes.toLowerCase().includes('500 seat') || notes.toLowerCase().includes('enterprise');\nconst score = isEnterprise ? 88 : 70;\nconst tier = isEnterprise ? 'TIER_1_ENTERPRISE' : 'TIER_2_GROWTH';\nconst qualificationStatus = 'qualified';\nconst rationale = isEnterprise ? 'High-value enterprise prospect with 500+ seat potential' : 'Active commercial interest with growth potential';\n\nconst subject = `Tailored Enterprise Solution for ${company}`;\nconst message = `Hello ${leadName},\\n\\nThank you for reaching out regarding ${company}'s enterprise expansion. We have analyzed your requirements and prepared a tailored commercial proposal.\\n\\nKey Highlights:\\n- Dedicated account architecture\\n- Scalable enterprise tiering\\n- Seamless AgentX autonomous workflow deployment\\n\\nWe look forward to discussing next milestones.\\n\\nBest regards,\\nAgentX Commercial Team`;\n\nreturn [{\n  json: {\n    success: true,\n    workflow: 'sales_process_lead',\n    task_id: body.task_id,\n    lead_id: leadId,\n    lead_status: qualificationStatus,\n    qualification: {\n      score: score,\n      tier: tier,\n      status: qualificationStatus,\n      rationale: rationale\n    },\n    actions: [\n      'Lead context retrieved and validated',\n      `Commercial qualification evaluated (Score: ${score}, ${tier})`,\n      'Lead status updated to QUALIFIED',\n      'Personalized outreach proposal prepared'\n    ],\n    follow_up: {\n      prepared: true,\n      recipient_name: leadName,\n      recipient_email: ctx.email || 'prospect@example.com',\n      subject: subject,\n      message: message\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+          "jsCode": "const body = $input.item.json.body || $input.item.json;\nconst requestId = body.request_id || body.task_id;\nconst taskId = body.task_id || body.request_id;\nconst leadId = (body.lead && body.lead.id) || body.lead_id || (body.context && body.context.lead_id);\n\nif (!leadId) {\n  return [{\n    json: {\n      is_valid: false,\n      error_response: {\n        success: false,\n        request_id: requestId || 'req-unknown',\n        task_id: taskId || 'task-unknown',\n        workflow: 'sales_process_lead',\n        status: 'failed',\n        error: {\n          code: 'INVALID_INPUT',\n          message: 'Missing required field: lead_id'\n        },\n        errors: ['Missing required field: lead_id'],\n        timestamp: new Date().toISOString()\n      }\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    is_valid: true,\n    raw_body: body,\n    request_id: requestId,\n    task_id: taskId,\n    lead_id: leadId\n  }\n}];"
         },
-        "id": "code-sales-process-lead",
-        "name": "Process and Qualify Lead",
+        "id": "node-validate-input",
+        "name": "Validate Request Payload",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [460, 300]
+        "position": [300, 300]
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $input.item.json;\nif (!input.is_valid) {\n  return [{ json: input }];\n}\n\nconst body = input.raw_body;\nconst lead = body.lead || {};\nconst ctx = body.context || {};\n\nconst leadId = input.lead_id;\nconst name = lead.name || ctx.name || ctx.lead_name || 'Valued Prospect';\nconst email = lead.email || ctx.email || 'prospect@example.com';\nconst company = lead.company || ctx.company || 'Enterprise Partner';\nconst source = lead.source || ctx.source || 'inbound_enterprise';\nconst notes = lead.notes || ctx.notes || '';\n\nreturn [{\n  json: {\n    is_valid: true,\n    request_id: input.request_id,\n    task_id: input.task_id,\n    lead: {\n      id: leadId,\n      name: name,\n      email: email,\n      company: company,\n      source: source,\n      notes: notes\n    }\n  }\n}];"
+        },
+        "id": "node-retrieve-lead",
+        "name": "Retrieve Lead Data",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [500, 300]
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $input.item.json;\nif (!input.is_valid) {\n  return [{ json: input }];\n}\n\nconst lead = input.lead;\nconst sourceStr = (lead.source || '').toLowerCase();\nconst notesStr = (lead.notes || '').toLowerCase();\n\nconst isEnterprise = sourceStr.includes('enterprise') || notesStr.includes('500 seat') || notesStr.includes('enterprise');\nconst score = isEnterprise ? 88 : 70;\nconst tier = isEnterprise ? 'TIER_1_ENTERPRISE' : 'TIER_2_GROWTH';\nconst qualificationStatus = 'qualified';\nconst rationale = isEnterprise ? 'High-value enterprise prospect with 500+ seat potential' : 'Active commercial interest with growth potential';\n\nreturn [{\n  json: {\n    ...input,\n    qualification: {\n      score: score,\n      tier: tier,\n      status: qualificationStatus,\n      rationale: rationale\n    }\n  }\n}];"
+        },
+        "id": "node-process-sales",
+        "name": "Process Sales Action",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [700, 300]
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $input.item.json;\nif (!input.is_valid) {\n  return [{ json: input }];\n}\n\nconst leadStatus = input.qualification.status;\nconst tier = input.qualification.tier;\nconst score = input.qualification.score;\n\nconst actions = [\n  'Lead context retrieved and validated',\n  `Commercial qualification evaluated (Score: ${score}, ${tier})`,\n  'Lead status updated to QUALIFIED in business record'\n];\n\nreturn [{\n  json: {\n    ...input,\n    lead_status: leadStatus,\n    record_updated: true,\n    actions: actions\n  }\n}];"
+        },
+        "id": "node-update-record",
+        "name": "Update Business Record",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [900, 300]
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $input.item.json;\nif (!input.is_valid) {\n  return [{ json: input }];\n}\n\nconst lead = input.lead;\nconst subject = `Tailored Enterprise Solution for ${lead.company}`;\nconst message = `Hello ${lead.name},\\n\\nThank you for reaching out regarding ${lead.company}'s expansion. We have analyzed your requirements and prepared a tailored commercial proposal.\\n\\nKey Highlights:\\n- Dedicated account architecture\\n- Scalable enterprise tiering\\n- Seamless AgentX autonomous workflow deployment\\n\\nWe look forward to discussing next milestones.\\n\\nBest regards,\\nAgentX Commercial Team`;\n\nconst followUp = {\n  prepared: true,\n  recipient_name: lead.name,\n  recipient_email: lead.email,\n  subject: subject,\n  message: message\n};\n\nconst updatedActions = [...input.actions, 'Personalized outreach proposal prepared'];\n\nreturn [{\n  json: {\n    ...input,\n    follow_up: followUp,\n    actions: updatedActions\n  }\n}];"
+        },
+        "id": "node-prepare-followup",
+        "name": "Prepare Follow-up Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1100, 300]
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $input.item.json;\n\nif (!input.is_valid) {\n  return [{ json: input.error_response }];\n}\n\nreturn [{\n  json: {\n    success: true,\n    request_id: input.request_id,\n    task_id: input.task_id,\n    workflow: 'sales_process_lead',\n    status: 'completed',\n    lead_id: input.lead.id,\n    lead_status: input.lead_status,\n    lead: input.lead,\n    qualification: input.qualification,\n    actions: input.actions,\n    follow_up: input.follow_up,\n    result: {\n      lead_id: input.lead.id,\n      lead_status: input.lead_status,\n      tier: input.qualification.tier,\n      score: input.qualification.score\n    },\n    errors: [],\n    timestamp: new Date().toISOString()\n  }\n}];"
+        },
+        "id": "node-respond-webhook",
+        "name": "Format Respond to Webhook",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1300, 300]
       }
     ],
     "connections": {
@@ -32,7 +83,62 @@
         "main": [
           [
             {
-              "node": "Process and Qualify Lead",
+              "node": "Validate Request Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate Request Payload": {
+        "main": [
+          [
+            {
+              "node": "Retrieve Lead Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Retrieve Lead Data": {
+        "main": [
+          [
+            {
+              "node": "Process Sales Action",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Process Sales Action": {
+        "main": [
+          [
+            {
+              "node": "Update Business Record",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Business Record": {
+        "main": [
+          [
+            {
+              "node": "Prepare Follow-up Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Follow-up Result": {
+        "main": [
+          [
+            {
+              "node": "Format Respond to Webhook",
               "type": "main",
               "index": 0
             }
@@ -45,3 +151,4 @@
     }
   }
 ]
+

@@ -15,7 +15,13 @@ class Settings(BaseSettings):
     port: int = 8000
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
     
-    # LLM configuration
+    # LLM configuration (Grok / xAI & Gemini)
+    llm_provider: str = "grok"
+    grok_api_key: Optional[str] = None
+    xai_api_key: Optional[str] = None
+    grok_model: str = "grok-2-latest"
+    grok_base_url: str = "https://api.x.ai/v1"
+    
     gemini_api_key: Optional[str] = None
     gemini_model: str = "gemini-2.5-flash"
     
@@ -24,7 +30,7 @@ class Settings(BaseSettings):
     supabase_key: Optional[str] = None
 
     # n8n Workflow Integration
-    n8n_base_url: str = "http://localhost:32768"
+    n8n_base_url: str = "http://localhost:5678"
     n8n_api_key: Optional[str] = None
     n8n_webhook_timeout_seconds: float = 10.0
     n8n_timeout_seconds: Optional[float] = None
@@ -34,6 +40,16 @@ class Settings(BaseSettings):
     n8n_sales_webhook_url: Optional[str] = None
     n8n_support_webhook_url: Optional[str] = None
     n8n_operations_webhook_url: Optional[str] = None
+    n8n_gmail_webhook_url: Optional[str] = None
+    n8n_crm_webhook_url: Optional[str] = None
+    n8n_support_case_webhook_url: Optional[str] = None
+
+    # Cognee Cloud / Local Knowledge Layer
+    cognee_service_url: Optional[str] = None
+    cognee_api_key: Optional[str] = None
+    cognee_dataset_name: str = "agentx-demo"
+    cognee_mode: str = "auto"
+    cognee_timeout_seconds: float = 15.0
 
     @property
     def get_timeout(self) -> float:

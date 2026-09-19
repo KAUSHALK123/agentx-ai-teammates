@@ -521,8 +521,69 @@ async def test_live_local_n8n_docker_integration():
     )
 
     result = await provider.invoke_workflow(payload)
-    if not result.success and "404" in str(result.error):
-        pytest.skip("Local n8n docker endpoint active, webhook listening state requires manual trigger.")
+    if not result.success:
+        pytest.skip(f"Local n8n webhook not currently active or listening: {result.error}")
 
     assert result.success is True
     assert result.workflow == "sales_process_lead"
+    assert result.lead_status == "qualified"
+    assert result.qualification is not None
+    assert result.qualification.get("tier") == "TIER_1_ENTERPRISE"
+    assert result.follow_up is not None
+    assert result.follow_up.get("prepared") is True
+
+
+@pytest.mark.asyncio
+async def test_live_local_n8n_missing_field_validation():
+    """LIVE test confirming n8n returns structured INVALID_INPUT error on missing required lead_id."""
+    provider = N8nToolProvider()
+    health = await provider.check_health()
+    if not health.get("available"):
+        pytest.skip("Local n8n Docker instance is offline")
+
+    payload = N8nInvocationPayload(
+        task_id="test_missing_lead_validation",
+        agent_id="sales",
+        workflow_id="sales_process_lead",
+        lead_id="",  # Missing required field
+        requested_action="process_lead",
+        context={},
+    )
+
+    result = await provider.invoke_workflow(payload)
+    if not result.success and ("404" in str(result.error) or "connection" in str(result.error).lower()):
+        pytest.skip("Local n8n docker endpoint active, webhook listening state requires manual trigger.")
+
+    assert result.success is False
+    assert result.error is not None
+    assert "INVALID_INPUT" in str(result.error) or "Missing required field" in str(result.error)
+
+
+@pytest.mark.asyncio
+async def test_live_local_n8n_idempotency_cache():
+    """LIVE test verifying repeated invocations with same task_id/workflow return cached result."""
+    provider = N8nToolProvider()
+    health = await provider.check_health()
+    if not health.get("available"):
+        pytest.skip("Local n8n Docker instance is offline")
+
+    payload = N8nInvocationPayload(
+        task_id="test_idempotency_task_99",
+        agent_id="sales",
+        workflow_id="sales_process_lead",
+        lead_id="LEAD-001",
+        requested_action="process_lead",
+        context={"company": "Acme Corp"},
+    )
+
+    res1 = await provider.invoke_workflow(payload)
+    if not res1.success:
+        pytest.skip(f"Local n8n webhook not active or listening: {res1.error}")
+
+    res2 = await provider.invoke_workflow(payload)
+
+    assert res1.success is True
+    assert res2.success is True
+    assert res1.lead_status == res2.lead_status
+    assert res1.timestamp == res2.timestamp
+

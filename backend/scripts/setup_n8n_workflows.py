@@ -94,14 +94,15 @@ def setup():
         code, out = run_cmd(["docker", "exec", "n8n", "n8n", "import:workflow", f"--input={wf['container_path']}"])
         logger.info("Import output: %s", out)
 
-    # 3. List workflows and publish each by ID
+    # 3. List workflows and activate/publish each by ID
     code, out = run_cmd(["docker", "exec", "n8n", "n8n", "list:workflow"])
     logger.info("Workflow list:\n%s", out)
     if code == 0:
         for line in out.splitlines():
             if "|" in line and "AgentX" in line:
                 wf_id = line.split("|")[0].strip()
-                logger.info("Publishing workflow: %s", wf_id)
+                logger.info("Activating and publishing workflow: %s", wf_id)
+                run_cmd(["docker", "exec", "n8n", "n8n", "update:workflow", f"--id={wf_id}", "--active=true"])
                 run_cmd(["docker", "exec", "n8n", "n8n", "publish:workflow", f"--id={wf_id}"])
 
     # 4. Restart container so webhooks are active
