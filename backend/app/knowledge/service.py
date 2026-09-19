@@ -2,7 +2,10 @@ import abc
 import logging
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
-import cognee
+try:
+    import cognee
+except ImportError:
+    cognee = None
 
 logger = logging.getLogger(__name__)
 

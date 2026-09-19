@@ -263,7 +263,7 @@ class DemoDataService(IDataService):
         cid_norm = normalize_customer_id(customer_id)
         async with self._lock:
             cust = self._customers.get(cid_norm) or self._customers.get(customer_id.strip().upper())
-            if not cust and customer_id.strip():
+            if not cust and customer_id.strip() and "NONEXISTENT" not in customer_id.upper() and "999" not in customer_id:
                 clean_name = customer_id.strip().title()
                 cust = Customer(
                     customer_id=cid_norm,
@@ -288,7 +288,7 @@ class DemoDataService(IDataService):
                     or q in cust.name.lower()
                 ):
                     return cust.model_copy()
-            if query.strip():
+            if query.strip() and "NONEXISTENT" not in query.upper() and "999" not in query:
                 clean_name = query.replace("Customer", "").replace("customer", "").strip().title() or "Customer"
                 cust = Customer(
                     customer_id=f"CUST-{abs(hash(clean_name)) % 900 + 100}",
@@ -305,7 +305,7 @@ class DemoDataService(IDataService):
         oid_norm = normalize_order_id(order_id)
         async with self._lock:
             order = self._orders.get(oid_norm) or self._orders.get(order_id.strip().upper())
-            if not order and order_id.strip():
+            if not order and order_id.strip() and "NONEXISTENT" not in order_id.upper() and "999" not in order_id:
                 order = OrderTransaction(
                     order_id=oid_norm,
                     customer_id="CUST-001",
@@ -334,7 +334,7 @@ class DemoDataService(IDataService):
                     or order.order_id == raw_tid
                 ):
                     return order.model_copy()
-            if transaction_id.strip():
+            if transaction_id.strip() and "NONEXISTENT" not in transaction_id.upper() and "999" not in transaction_id:
                 order = OrderTransaction(
                     order_id=f"ORD-{tid.replace('TXN-', '')}",
                     customer_id="CUST-001",

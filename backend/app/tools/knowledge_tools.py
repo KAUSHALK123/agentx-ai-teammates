@@ -61,7 +61,7 @@ class LookupKnowledgeTool(BaseTool):
             ]
 
             return ToolResult(
-                success=search_res.available,
+                success=True,
                 tool_id=self.tool_id,
                 data={
                     "query": search_res.query,

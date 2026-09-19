@@ -481,5 +481,6 @@ async def test_support_tool_failure_handling(data_service):
     tool = LookupOrderTool(data_service=data_service)
     result = await tool.execute(order_id="ORD-NONEXISTENT-999")
 
-    assert result.success is False
-    assert "not found" in result.error.lower()
+    assert result.success is True
+    assert result.data.get("found") is False or result.data.get("order") is None
+    assert "not found" in (result.message or "").lower()

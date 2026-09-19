@@ -3,7 +3,10 @@ import hashlib
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import cognee
+try:
+    import cognee
+except ImportError:
+    cognee = None
 
 logger = logging.getLogger(__name__)
 
