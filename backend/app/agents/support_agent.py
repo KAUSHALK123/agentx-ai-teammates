@@ -71,6 +71,7 @@ class SupportAgent(BaseAgent):
         "lookup_customer",
         "lookup_order",
         "lookup_transaction",
+        "lookup_knowledge",
         "create_activity",
         "prepare_customer_response",
         "issue_demo_refund",
@@ -87,6 +88,45 @@ class SupportAgent(BaseAgent):
         # Analyze support intent and entities
         classification = SupportAnalyzer.classify_intent(user_request)
         intent = classification.intent
+
+        # Check if policy or knowledge lookup is relevant
+        req_lower = user_request.lower()
+        is_policy_query = any(kw in req_lower for kw in ["policy", "rule", "condition", "sla", "guideline", "allowed", "allow", "eligib", "faq", "what does"])
+
+        if is_policy_query:
+            steps = [
+                PlanStep(
+                    step_id=1,
+                    action="Search business knowledge graph for relevant policies and rules",
+                    type="tool_action",
+                    tool_id="lookup_knowledge",
+                    input={"query": user_request},
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=2,
+                    action="Identify customer profile and verify account status",
+                    type="tool_action",
+                    tool_id="lookup_customer",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=3,
+                    action="Prepare customer response based on retrieved policy context",
+                    type="tool_action",
+                    tool_id="prepare_customer_response",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=4,
+                    action="Log resolution activity and policy decision record",
+                    type="synthesis",
+                    tool_id="create_activity",
+                    status="PENDING",
+                ),
+            ]
+            objective = f"Retrieve business policy and formulate resolution for: {user_request[:60]}"
+            return StructuredTaskPlan(task_id=tid, agent=self.agent_id, objective=objective, steps=steps)
 
         # Build intent-adapted plan steps
         if intent == SupportIntent.REFUND_REQUEST:

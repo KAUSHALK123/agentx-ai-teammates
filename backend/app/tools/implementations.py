@@ -533,6 +533,8 @@ def initialize_default_tools() -> None:
         N8nSendFollowupTool,
         N8nOperationsDailyCheckTool,
     )
+    from app.tools.knowledge_tools import LookupKnowledgeTool
+
     registry = get_tool_registry()
     tools = [
         LookupCustomerTool(),
@@ -549,6 +551,7 @@ def initialize_default_tools() -> None:
         N8nProcessLeadTool(),
         N8nSendFollowupTool(),
         N8nOperationsDailyCheckTool(),
+        LookupKnowledgeTool(),
     ]
     for tool in tools:
         if not registry.has_tool(tool.tool_id):
