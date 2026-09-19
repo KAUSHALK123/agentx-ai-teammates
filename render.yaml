@@ -31,5 +31,6 @@ services:
       - key: COGNEE_SERVICE_URL
         value: https://api.cognee.ai
       - key: COGNEE_DATASET_NAME
-        value: demo_business_knowledge
+        value: agentx_business_knowledge
+
 

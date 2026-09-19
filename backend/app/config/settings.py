@@ -48,8 +48,8 @@ class Settings(BaseSettings):
     # Cognee Cloud / Local Knowledge Layer
     cognee_service_url: Optional[str] = None
     cognee_api_key: Optional[str] = None
-    cognee_dataset_name: str = "agentx-demo"
-    cognee_mode: str = "auto"
+    cognee_dataset_name: str = "agentx_business_knowledge"
+    cognee_mode: str = "cloud"
     cognee_timeout_seconds: float = 15.0
 
     @property
