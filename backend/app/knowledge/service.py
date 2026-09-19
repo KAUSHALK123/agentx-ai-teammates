@@ -216,13 +216,18 @@ class CogneeProvider(IKnowledgeProvider):
             import os
             data_dir = Path("app/knowledge/data") if Path("app/knowledge/data").exists() else Path("backend/app/knowledge/data")
             if data_dir.exists():
-                q_words = set(query.lower().split())
-                for file_path in sorted(data_dir.glob("*.md")):
+                q_words = [w for w in query.lower().split() if len(w) > 2]
+                scored_chunks = []
+                for file_path in data_dir.glob("*.md"):
                     content = file_path.read_text(encoding="utf-8", errors="ignore")
-                    matches = sum(1 for w in q_words if w in content.lower())
+                    content_lower = content.lower()
+                    # Calculate relevance score based on query words and filename
+                    matches = sum(1 for w in q_words if w in content_lower)
+                    if file_path.stem.lower() in query.lower() or any(w in file_path.stem.lower() for w in q_words):
+                        matches += 3
                     if matches > 0:
-                        preview = content[:500].strip()
-                        chunks.append(
+                        preview = content[:2500].strip()
+                        scored_chunks.append(
                             KnowledgeChunk(
                                 content=preview,
                                 source=file_path.name,
@@ -230,8 +235,9 @@ class CogneeProvider(IKnowledgeProvider):
                                 metadata={"dataset": self.dataset_name, "fallback": True},
                             )
                         )
-                    if len(chunks) >= limit:
-                        break
+
+                scored_chunks.sort(key=lambda c: c.score or 0.0, reverse=True)
+                chunks.extend(scored_chunks[:limit])
         except Exception as exc:
             logger.warning("Knowledge local document fallback error: %s", exc)
 
@@ -241,6 +247,7 @@ class CogneeProvider(IKnowledgeProvider):
             available=True,
             provider="cognee",
         )
+
 
 
 

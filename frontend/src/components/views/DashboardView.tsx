@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { agentsApi } from '../../api';
+
 import { 
   Zap, 
   CheckCircle, 
@@ -15,9 +17,26 @@ import {
   Send, 
   AlertCircle, 
   Mail, 
-  MoreHorizontal
+  MoreHorizontal,
+  Loader2,
+  Sparkles,
+  BookOpen,
+  ArrowRight
 } from 'lucide-react';
 import type { AgentRole } from '../../types';
+
+interface ChatMessage {
+  id: string;
+  sender: 'ai' | 'user';
+  text: string;
+  agentName?: string;
+  agentRole?: AgentRole;
+  knowledgeUsed?: Array<{ source: string; content?: string; score?: number }>;
+  buttons?: string[];
+  suggestedActions?: string[];
+  taskId?: string;
+  timestamp: string;
+}
 
 export const DashboardView: React.FC = () => {
   const { 
@@ -28,48 +47,115 @@ export const DashboardView: React.FC = () => {
     agents, 
     integrations, 
     analytics, 
-    createNewTask 
+    createNewTask
   } = useApp();
 
-  const [chatMessages, setChatMessages] = useState<Array<{ sender: 'ai' | 'user'; text: string; buttons?: string[] }>>([
+
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
+      id: 'msg-init',
       sender: 'ai',
-      text: "Good morning. AgentX workforce is online. You can type instructions or customer inquiries to dispatch autonomous tasks."
+      text: "Good morning. AgentX workforce is online. You can ask business policy questions, query enterprise knowledge, or instruct our AI teammates to execute autonomous workflows.",
+      agentName: "AgentX Assistant",
+      timestamp: "Just now",
+      suggestedActions: [
+        "What is the refund policy?",
+        "How do we handle delayed orders?",
+        "Qualify enterprise lead Sarah with $500k budget",
+        "Run daily business check"
+      ]
     }
   ]);
 
   const [inputPrompt, setInputPrompt] = useState('');
+  const [isThinking, setIsThinking] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
 
   const activeCount = tasks.filter(t => t.status === 'EXECUTING' || t.status === 'WAITING_FOR_APPROVAL').length;
   const completedCount = tasks.filter(t => t.status === 'COMPLETED').length;
 
-  const handleSendPrompt = (textToSend?: string) => {
-    const prompt = textToSend || inputPrompt;
-    if (!prompt.trim()) return;
+  const handleSendPrompt = async (textToSend?: string) => {
+    const prompt = (textToSend || inputPrompt).trim();
+    if (!prompt || isThinking) return;
 
-    // Add user message
-    setChatMessages(prev => [...prev, { sender: 'user', text: prompt }]);
+    const userMsgId = `usr-${Date.now()}`;
+    const userMsg: ChatMessage = {
+      id: userMsgId,
+      sender: 'user',
+      text: prompt,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setChatMessages(prev => [...prev, userMsg]);
     setInputPrompt('');
+    setIsThinking(true);
 
-    // Trigger AI response & dispatch task
-    setTimeout(() => {
-      createNewTask({
-        title: prompt,
-        description: prompt,
-        agentRole: 'auto',
-        priority: 'HIGH'
-      });
+    try {
+      // Call backend AI agent chat endpoint
+      const res = await agentsApi.chatWithAgent(prompt);
+      const aiRole = (res.agent_id as AgentRole) || 'support';
+      
+      const aiMsg: ChatMessage = {
+        id: `ai-${Date.now()}`,
+        sender: 'ai',
+        text: res.reply || `Understood. I have evaluated your request against ${res.agent_name || 'AgentX'} policies.`,
+        agentName: res.agent_name || 'AgentX Teammate',
+        agentRole: aiRole,
+        knowledgeUsed: res.knowledge_used,
+        suggestedActions: res.suggested_actions,
+        taskId: res.task_id,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
 
-      setChatMessages(prev => [
-        ...prev,
-        {
-          sender: 'ai',
-          text: `Task dispatched to AI workforce: "${prompt}". You can view execution timeline in real-time.`
-        }
-      ]);
-    }, 800);
+      setChatMessages(prev => [...prev, aiMsg]);
+    } catch (err: any) {
+      // Fallback local intelligent response
+      const descLower = prompt.toLowerCase();
+      let fallbackRole: AgentRole = 'support';
+      let fallbackName = 'Support Teammate';
+      let fallbackReply = `I have received your request: "${prompt}". You can dispatch this as an autonomous task to our workforce.`;
+      let fallbackActions = ['Dispatch Task', 'Investigate Details'];
+
+      if (descLower.includes('refund') || descLower.includes('return') || descLower.includes('policy')) {
+        fallbackReply = `According to our business policies, refunds are eligible within 30 days of receipt for unopened items or carrier-confirmed lost shipments. Immediate store vouchers can be authorized for VIP accounts.`;
+        fallbackActions = ['View Refund Policy', 'Lookup Customer Ticket'];
+      } else if (descLower.includes('lead') || descLower.includes('sale') || descLower.includes('proposal') || descLower.includes('price')) {
+        fallbackRole = 'sales';
+        fallbackName = 'Sales Teammate';
+        fallbackReply = `Sales teammate is ready. I can qualify this prospect, enrich company data from CRM, and prepare an approved personalized follow-up.`;
+        fallbackActions = ['Qualify Lead', 'Prepare Follow-up'];
+      } else if (descLower.includes('inventory') || descLower.includes('operation') || descLower.includes('stock') || descLower.includes('check')) {
+        fallbackRole = 'operations';
+        fallbackName = 'Operations Teammate';
+        fallbackReply = `Operations teammate is active. I can run our deterministic daily business check, inspect inventory levels, and highlight anomalies.`;
+        fallbackActions = ['Run Operations Check', 'Audit Stock'];
+      }
+
+      const aiMsg: ChatMessage = {
+        id: `ai-${Date.now()}`,
+        sender: 'ai',
+        text: fallbackReply,
+        agentName: fallbackName,
+        agentRole: fallbackRole,
+        suggestedActions: fallbackActions,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      setChatMessages(prev => [...prev, aiMsg]);
+    } finally {
+      setIsThinking(false);
+    }
   };
+
+  const handleDispatchTaskFromChat = (prompt: string, role?: AgentRole) => {
+    createNewTask({
+      title: prompt.slice(0, 60),
+      description: prompt,
+      agentRole: role || 'auto',
+      priority: 'HIGH'
+    });
+  };
+
 
   const navigateToAgentDetail = (role: AgentRole) => {
     setSelectedAgentRole(role);
@@ -241,76 +327,131 @@ export const DashboardView: React.FC = () => {
           </div>
 
           {/* Chat Body */}
-          <div className="flex-1 p-8 overflow-y-auto space-y-6 custom-scrollbar bg-white/5">
-            {chatMessages.map((msg, idx) => (
-              <div key={idx} className={`flex gap-4 ${msg.sender === 'user' ? 'flex-row-reverse' : 'max-w-[85%]'}`}>
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                  msg.sender === 'ai' ? 'bg-cyan-500 text-white' : 'bg-slate-200 text-slate-600'
+          <div className="flex-1 p-6 md:p-8 overflow-y-auto space-y-6 custom-scrollbar bg-white/5 max-h-[500px]">
+            {chatMessages.map((msg) => (
+              <div key={msg.id} className={`flex gap-3.5 ${msg.sender === 'user' ? 'flex-row-reverse' : 'max-w-[92%]'}`}>
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                  msg.sender === 'ai' 
+                    ? msg.agentRole === 'sales'
+                      ? 'bg-gradient-to-br from-emerald-500 to-cyan-600 text-white'
+                      : msg.agentRole === 'operations'
+                      ? 'bg-gradient-to-br from-amber-500 to-orange-600 text-white'
+                      : 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white'
+                    : 'bg-slate-200 text-slate-700'
                 }`}>
-                  {msg.sender === 'ai' ? <Bot className="w-5 h-5" /> : <User className="w-5 h-5" />}
+                  {msg.sender === 'ai' ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
                 </div>
 
                 <div className={`p-4 rounded-2xl text-sm leading-relaxed ${
-                  msg.sender === 'ai' 
-                    ? 'glass-card text-slate-700 rounded-tl-none' 
-                    : 'bg-cyan-500 text-white rounded-tr-none shadow-md'
+                  msg.sender === 'user'
+                    ? 'bg-cyan-600 text-white rounded-tr-none shadow-md font-medium'
+                    : 'glass-card text-slate-800 rounded-tl-none border border-white/80 shadow-sm'
                 }`}>
-                  <p>{msg.text}</p>
+                  {msg.sender === 'ai' && (
+                    <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-200/50">
+                      <span className="text-[11px] font-bold text-cyan-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3 text-cyan-500" />
+                        {msg.agentName || 'AgentX Assistant'}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400">{msg.timestamp}</span>
+                    </div>
+                  )}
 
-                  {msg.buttons && (
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                      {msg.buttons.map((btnLabel, i) => (
+                  <div className="whitespace-pre-line text-slate-800">{msg.text}</div>
+
+                  {/* Knowledge Grounding Citations */}
+                  {msg.knowledgeUsed && msg.knowledgeUsed.length > 0 && (
+                    <div className="mt-3 pt-2.5 border-t border-slate-200/60 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <BookOpen className="w-3 h-3 text-cyan-600" />
+                        Knowledge Grounded:
+                      </span>
+                      {msg.knowledgeUsed.map((k, kIdx) => (
+                        <span key={kIdx} className="px-2 py-0.5 bg-cyan-50 border border-cyan-200 text-[10px] font-mono font-bold text-cyan-700 rounded-md">
+                          {k.source}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Suggested Actions */}
+                  {msg.suggestedActions && msg.suggestedActions.length > 0 && (
+                    <div className="mt-3 pt-2 flex flex-wrap gap-1.5">
+                      {msg.suggestedActions.map((actionText, i) => (
                         <button
                           key={i}
-                          onClick={() => handleSendPrompt(`Assign to ${btnLabel}`)}
-                          className="py-2 px-3 bg-white/80 border border-slate-200 text-[11px] font-bold text-slate-700 rounded-xl hover:bg-cyan-500 hover:text-white transition-all shadow-xs"
+                          onClick={() => handleSendPrompt(actionText)}
+                          className="px-2.5 py-1 bg-white/90 border border-slate-200 text-[11px] font-semibold text-slate-700 rounded-lg hover:bg-cyan-50 hover:border-cyan-300 hover:text-cyan-800 transition-all shadow-2xs flex items-center gap-1"
                         >
-                          {btnLabel}
+                          <span>{actionText}</span>
+                          <ArrowRight className="w-2.5 h-2.5 opacity-60" />
                         </button>
                       ))}
+                      <button
+                        onClick={() => handleDispatchTaskFromChat(msg.text.slice(0, 100), msg.agentRole)}
+                        className="px-2.5 py-1 bg-cyan-500 text-white text-[11px] font-bold rounded-lg hover:bg-cyan-600 transition-all shadow-xs flex items-center gap-1"
+                      >
+                        <Zap className="w-3 h-3" />
+                        <span>Dispatch Task</span>
+                      </button>
                     </div>
                   )}
                 </div>
               </div>
             ))}
+
+            {isThinking && (
+              <div className="flex gap-3.5 max-w-[85%]">
+                <div className="w-8 h-8 rounded-xl bg-cyan-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <Bot className="w-4 h-4 animate-spin" />
+                </div>
+                <div className="p-4 rounded-2xl glass-card text-slate-700 rounded-tl-none border border-white/80 shadow-sm flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 text-cyan-600 animate-spin" />
+                  <span className="text-xs font-medium text-slate-600">Consulting Cognee Knowledge & formulating response...</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Chat Input Bar */}
-          <div className="p-6 bg-white/40 border-t border-white/50">
+          <div className="p-5 md:p-6 bg-white/40 border-t border-white/50">
             <div className="relative flex items-center">
               <input
                 type="text"
                 value={inputPrompt}
                 onChange={(e) => setInputPrompt(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSendPrompt()}
-                placeholder="Tell me what you need done..."
-                className="w-full pl-6 pr-24 py-4 bg-white border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-4 focus:ring-cyan-500/10 transition-all font-medium text-slate-800"
+                placeholder="Ask about policies, delayed orders, leads, or operations..."
+                disabled={isThinking}
+                className="w-full pl-5 pr-24 py-3.5 bg-white border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-4 focus:ring-cyan-500/10 transition-all font-medium text-slate-800 disabled:opacity-60"
               />
-              <div className="absolute right-2 flex items-center gap-2">
+              <div className="absolute right-2 flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => setIsRecording(!isRecording)}
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
                     isRecording ? 'bg-red-100 text-red-600 animate-pulse' : 'text-slate-400 hover:text-cyan-500 hover:bg-cyan-50'
                   }`}
                   title="Voice Input"
                 >
-                  <Mic className="w-5 h-5" />
+                  <Mic className="w-4 h-4" />
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleSendPrompt()}
-                  className="w-10 h-10 bg-cyan-500 text-white rounded-xl shadow-lg shadow-cyan-500/20 flex items-center justify-center hover:bg-cyan-600 transition-all hover:scale-105"
-                  title="Dispatch Instruction"
+                  disabled={isThinking || !inputPrompt.trim()}
+                  className="w-9 h-9 bg-cyan-500 text-white rounded-xl shadow-md shadow-cyan-500/20 flex items-center justify-center hover:bg-cyan-600 transition-all disabled:opacity-40 disabled:hover:scale-100 hover:scale-105"
+                  title="Send Message"
                 >
-                  <Send className="w-5 h-5" />
+                  {isThinking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </button>
               </div>
             </div>
           </div>
         </div>
       </div>
+
 
       {/* Bottom Row: Live Task Stream & Recent Events */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">

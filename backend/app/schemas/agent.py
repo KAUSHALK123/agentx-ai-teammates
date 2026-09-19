@@ -30,3 +30,22 @@ class TaskPlanResponse(BaseModel):
     plan: StructuredTaskPlan
     is_ambiguous: bool = False
     clarification_prompt: Optional[str] = None
+
+
+class AgentChatRequest(BaseModel):
+    """Request payload for conversational chat with an AI teammate."""
+    message: str = Field(..., min_length=1, description="User prompt or question")
+    agent_id: Optional[str] = Field(None, description="Optional target agent id ('support', 'sales', 'operations')")
+    workspace_id: Optional[str] = Field(None, description="Active workspace context")
+
+
+class AgentChatResponse(BaseModel):
+    """Conversational response from an AI teammate with knowledge grounding."""
+    agent_id: str
+    agent_name: str
+    reply: str
+    knowledge_used: List[dict] = Field(default_factory=list)
+    task_id: Optional[str] = None
+    suggested_actions: List[str] = Field(default_factory=list)
+    created_at: str
+

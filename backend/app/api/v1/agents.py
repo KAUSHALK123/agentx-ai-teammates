@@ -14,7 +14,7 @@ from app.models.agent_ownership import (
     AgentInvitationStatus,
 )
 from app.models.task import AgentType
-from app.schemas.agent import AgentResponse
+from app.schemas.agent import AgentResponse, AgentChatRequest, AgentChatResponse
 from app.schemas.access_control import (
     AgentCreateRequest,
     AgentInstanceResponse,
@@ -70,6 +70,93 @@ async def list_agents(
             )
         )
     return res
+
+
+@router.post(
+    "/chat",
+    response_model=AgentChatResponse,
+    summary="Chat directly with an AI teammate with Cognee Knowledge grounding",
+)
+async def chat_with_agent(
+    request: AgentChatRequest,
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace),
+) -> AgentChatResponse:
+    """Conversational assistant endpoint connecting users with AI teammates and Cognee Knowledge."""
+    await verify_workspace_access(current_user.id, workspace.id)
+
+    prompt = request.message.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    # 1. Resolve target agent
+    target_agent_id = request.agent_id
+    if not target_agent_id or target_agent_id == "auto":
+        route_res = await _router_instance.determine_route(prompt)
+        target_agent_id = route_res.selected_agent or "support"
+
+    agent = _router_instance.get_agent(target_agent_id)
+    if not agent:
+        agent = _router_instance.get_agent("support")
+
+    # 2. Query Cognee Cloud Knowledge
+    from app.knowledge.service import get_knowledge_service
+    from app.core.llm import get_llm_provider
+
+    ks = get_knowledge_service()
+    search_res = await ks.search(prompt, limit=3)
+    knowledge_list = []
+    knowledge_context_text = ""
+    if search_res and search_res.results:
+        for chunk in search_res.results:
+            knowledge_list.append({
+                "source": chunk.source,
+                "content": chunk.content[:300],
+                "score": chunk.score,
+            })
+            knowledge_context_text += f"\n- [{chunk.source}]: {chunk.content}\n"
+
+    # 3. Construct System Instructions with Persona and Knowledge Context
+    system_inst = (
+        f"You are {agent.name}, the {agent.role} in AgentX.\n"
+        f"Description: {agent.description}\n"
+        f"Responsibilities: {', '.join(agent.responsibilities)}\n"
+        f"Available Tools: {', '.join(agent.available_tools)}\n\n"
+        "Guidelines:\n"
+        "- Provide clear, concise, actionable, and helpful answers grounded in company knowledge.\n"
+        "- If company policies/facts are provided below, use them accurately and cite them.\n"
+        "- If the user asks to execute an action (e.g. refund, email, lead followup, operations check), summarize the proposed steps clearly and mention that you can execute it as an autonomous task.\n"
+        "- Maintain a professional, competent tone.\n"
+    )
+    if knowledge_context_text:
+        system_inst += f"\nVerified Enterprise Knowledge:\n{knowledge_context_text}\n"
+
+    llm = get_llm_provider()
+    reply = await llm.generate_text(prompt, system_instruction=system_inst)
+    if not reply or reply.startswith("Processed request:"):
+        if knowledge_list:
+            reply = f"Here is the verified information from {knowledge_list[0]['source']}:\n\n{knowledge_list[0]['content']}"
+        else:
+            reply = f"I am {agent.name}. I can help you with {', '.join(agent.responsibilities[:3])}. What would you like to investigate or execute?"
+
+    # Determine suggested actions
+    suggested = []
+    if agent.agent_id == "support":
+        suggested = ["Check Delayed Order", "Review Refund Policy", "Investigate Customer Ticket"]
+    elif agent.agent_id == "sales":
+        suggested = ["Qualify Lead", "Prepare Follow-up Email", "Sync CRM Records"]
+    elif agent.agent_id == "operations":
+        suggested = ["Run Daily Business Check", "Inspect Inventory Levels", "Audit Fulfillment Status"]
+
+    return AgentChatResponse(
+        agent_id=agent.agent_id,
+        agent_name=agent.name,
+        reply=reply,
+        knowledge_used=knowledge_list,
+        suggested_actions=suggested,
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+
 
 
 @router.post(
