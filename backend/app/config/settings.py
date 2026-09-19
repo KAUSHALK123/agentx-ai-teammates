@@ -15,7 +15,13 @@ class Settings(BaseSettings):
     port: int = 8000
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
     
-    # LLM configuration
+    # LLM configuration (Grok / xAI & Gemini)
+    llm_provider: str = "grok"
+    grok_api_key: Optional[str] = None
+    xai_api_key: Optional[str] = None
+    grok_model: str = "grok-2-latest"
+    grok_base_url: str = "https://api.x.ai/v1"
+    
     gemini_api_key: Optional[str] = None
     gemini_model: str = "gemini-2.5-flash"
     
