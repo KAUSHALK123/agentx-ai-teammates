@@ -21,7 +21,7 @@ class BaseLLMProvider(ABC):
 
 
 class GrokLLMProvider(BaseLLMProvider):
-    """xAI Grok LLM provider implementation (OpenAI-compatible /chat/completions API)."""
+    """Grok (xAI) & GroqCloud LLM provider implementation (OpenAI-compatible /chat/completions API)."""
 
     def __init__(
         self,
@@ -31,8 +31,17 @@ class GrokLLMProvider(BaseLLMProvider):
     ):
         settings = get_settings()
         self.api_key = api_key or settings.grok_api_key or settings.xai_api_key
-        self.model_name = model_name or settings.grok_model or "grok-2-latest"
-        self.base_url = (base_url or settings.grok_base_url or "https://api.x.ai/v1").rstrip("/")
+        
+        # Auto-detect GroqCloud (gsk_...) vs xAI Grok (xai-...)
+        if self.api_key and self.api_key.startswith("gsk_"):
+            self.base_url = (base_url or "https://api.groq.com/openai/v1").rstrip("/")
+            self.model_name = model_name or (
+                settings.grok_model if settings.grok_model and "grok" not in settings.grok_model.lower()
+                else "openai/gpt-oss-120b"
+            )
+        else:
+            self.base_url = (base_url or settings.grok_base_url or "https://api.x.ai/v1").rstrip("/")
+            self.model_name = model_name or settings.grok_model or "grok-2-latest"
 
     async def generate_text(
         self,
