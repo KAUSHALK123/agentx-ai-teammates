@@ -658,7 +658,7 @@ class TaskExecutionEngine:
             if "notes" not in params:
                 params["notes"] = f"Processed and qualified by Sales Teammate for task {context.task_id}"
 
-        elif tool_id == "n8n_process_lead":
+        elif tool_id in ["sales_process_lead", "n8n_process_lead"]:
             lid = params.get("lead_id") or context.variables.get("lead_id") or "LEAD-001"
             params["lead_id"] = lid
             params["task_id"] = context.task_id
@@ -672,6 +672,18 @@ class TaskExecutionEngine:
                 if "extracted_leads" in context.variables:
                     ctx_payload["leads"] = context.variables["extracted_leads"]
                 params["context"] = ctx_payload
+
+        elif tool_id in ["support_handle_issue", "n8n_support_handle_issue"]:
+            params["task_id"] = context.task_id
+            params["customer_id"] = params.get("customer_id") or context.variables.get("customer_id") or "CUST-001"
+            params["order_id"] = params.get("order_id") or context.variables.get("order_id") or "ORD-1001"
+            if "issue" not in params:
+                params["issue"] = {
+                    "customer_id": params["customer_id"],
+                    "order_id": params["order_id"],
+                    "description": user_request,
+                    "sentiment": "negative",
+                }
 
         elif tool_id == "n8n_operations_check":
             params["task_id"] = context.task_id

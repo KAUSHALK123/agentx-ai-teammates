@@ -61,6 +61,7 @@ class SalesAgent(BaseAgent):
     available_tools: List[str] = [
         "lookup_customer",
         "lookup_lead",
+        "sales_process_lead",
         "n8n_process_lead",
         "update_lead",
         "n8n_send_followup",
@@ -127,18 +128,11 @@ class SalesAgent(BaseAgent):
                     step_id=2,
                     action="Orchestrate n8n lead qualification workflow and draft proposal",
                     type="tool_action",
-                    tool_id="n8n_process_lead",
+                    tool_id="sales_process_lead",
                     status="PENDING",
                 ),
                 PlanStep(
                     step_id=3,
-                    action="Update CRM lead status with qualification outcome",
-                    type="tool_action",
-                    tool_id="update_lead",
-                    status="PENDING",
-                ),
-                PlanStep(
-                    step_id=4,
                     action="Log commercial activity and queue for follow-up review",
                     type="synthesis",
                     tool_id="create_activity",
@@ -150,7 +144,7 @@ class SalesAgent(BaseAgent):
                 agent="sales",
                 objective=f"Process commercial lead and formulate tailored proposal: {user_request[:60]}",
                 steps=steps,
-                primary_tool="n8n_process_lead",
+                primary_tool="sales_process_lead",
                 plan_summary="Process commercial lead, evaluate qualification via n8n, and draft proposal",
             )
 

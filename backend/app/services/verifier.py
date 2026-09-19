@@ -158,8 +158,8 @@ class TaskVerifier:
                         summary="Customer response verification failed: empty response content.",
                     )
 
-            # Verification for n8n_process_lead
-            elif tool_id == "n8n_process_lead":
+            # Verification for n8n_process_lead / sales_process_lead
+            elif tool_id in ["n8n_process_lead", "sales_process_lead"]:
                 lead_id = data.get("lead_id")
                 expected_status = data.get("lead_status")
                 qualification = data.get("qualification") or {}
@@ -187,6 +187,25 @@ class TaskVerifier:
                         summary=f"n8n lead status mismatch: expected '{expected_status}', found '{persisted_lead.status}'",
                         details={"expected": expected_status, "actual": persisted_lead.status},
                     )
+
+            # Verification for support_handle_issue / n8n_support_handle_issue
+            elif tool_id in ["support_handle_issue", "n8n_support_handle_issue"]:
+                if data.get("approval_required") or data.get("requires_approval") or data.get("status") == "waiting_for_approval":
+                    return VerificationResult(
+                        verified=True,
+                        verification_type="support_approval_gate",
+                        recommended_status=TaskStatus.WAITING_FOR_APPROVAL,
+                        requires_human_review=True,
+                        summary="Support issue resolution paused for supervisor approval.",
+                        details=data,
+                    )
+                return VerificationResult(
+                    verified=True,
+                    verification_type="n8n_support_investigation",
+                    recommended_status=TaskStatus.COMPLETED,
+                    summary=f"Customer support issue verified and resolved via n8n (Customer: {data.get('customer_id') or 'CUST-001'}).",
+                    details=data,
+                )
 
             # Verification for n8n_send_followup
             elif tool_id == "n8n_send_followup":

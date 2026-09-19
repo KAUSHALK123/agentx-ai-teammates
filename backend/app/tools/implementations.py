@@ -529,7 +529,10 @@ def initialize_default_tools() -> None:
         EscalateSupportCaseTool,
     )
     from app.tools.n8n_tools import (
+        SalesProcessLeadTool,
         N8nProcessLeadTool,
+        SupportHandleIssueTool,
+        N8nSupportHandleIssueTool,
         N8nSendFollowupTool,
         N8nOperationsDailyCheckTool,
     )
@@ -548,7 +551,10 @@ def initialize_default_tools() -> None:
         PrepareCustomerResponseTool(),
         IssueDemoRefundTool(),
         EscalateSupportCaseTool(),
+        SalesProcessLeadTool(),
         N8nProcessLeadTool(),
+        SupportHandleIssueTool(),
+        N8nSupportHandleIssueTool(),
         N8nSendFollowupTool(),
         N8nOperationsDailyCheckTool(),
         LookupKnowledgeTool(),

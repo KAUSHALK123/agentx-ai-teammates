@@ -19,8 +19,16 @@ class N8nInvocationPayload(BaseModel):
     task_id: str
     agent_id: str
     workflow_id: str
+    workspace_id: str = "default"
+    user_id: str = "usr_demo"
+    action: Optional[str] = None
     lead_id: Optional[str] = None
-    requested_action: str
+    customer_id: Optional[str] = None
+    order_id: Optional[str] = None
+    check_type: Optional[str] = None
+    requested_action: Optional[str] = None
+    lead: Optional[Dict[str, Any]] = None
+    issue: Optional[Dict[str, Any]] = None
     context: Dict[str, Any] = Field(default_factory=dict)
     idempotency_key: Optional[str] = None
 
@@ -28,9 +36,13 @@ class N8nInvocationPayload(BaseModel):
 class N8nExecutionResult(BaseModel):
     """Normalized structured result returned from n8n workflow."""
     success: bool
+    status: str = "completed"
     workflow: str
     task_id: Optional[str] = None
     lead_id: Optional[str] = None
+    customer_id: Optional[str] = None
+    order_id: Optional[str] = None
+    approval_required: Optional[bool] = False
     lead_status: Optional[str] = None
     qualification: Optional[Dict[str, Any]] = None
     actions: List[str] = Field(default_factory=list)
@@ -41,7 +53,11 @@ class N8nExecutionResult(BaseModel):
     requires_attention: Optional[bool] = None
     metrics: Optional[Dict[str, Any]] = None
     report: Optional[Dict[str, Any]] = None
+    lead: Optional[Dict[str, Any]] = None
+    issue: Optional[Dict[str, Any]] = None
+    result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    error_details: Optional[Dict[str, Any]] = None
     timestamp: Optional[str] = None
 
 
@@ -74,6 +90,36 @@ APPROVED_N8N_WORKFLOWS: Dict[str, N8nWorkflowDefinition] = {
                 "actions": {"type": "array"},
                 "qualification": {"type": "object"},
                 "follow_up": {"type": "object"},
+            },
+        },
+    ),
+    "support_handle_issue": N8nWorkflowDefinition(
+        workflow_id="support_handle_issue",
+        name="Support — Handle Customer Issue",
+        purpose="Investigate customer support complaint/order issue, inspect policy limits, and formulate resolution.",
+        allowed_agent="support",
+        risk_level="LOW",
+        webhook_path="agentx-support-handle-issue",
+        input_schema={
+            "type": "object",
+            "required": ["task_id", "customer_id"],
+            "properties": {
+                "task_id": {"type": "string"},
+                "customer_id": {"type": "string"},
+                "order_id": {"type": "string"},
+                "action": {"type": "string"},
+                "issue": {"type": "object"},
+            },
+        },
+        output_schema={
+            "type": "object",
+            "required": ["success", "workflow"],
+            "properties": {
+                "success": {"type": "boolean"},
+                "workflow": {"type": "string"},
+                "approval_required": {"type": "boolean"},
+                "actions": {"type": "array"},
+                "issue": {"type": "object"},
             },
         },
     ),

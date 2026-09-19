@@ -39,6 +39,8 @@ class ToolExecutionService:
             "prepare_customer_response",
             "issue_demo_refund",
             "escalate_support_case",
+            "support_handle_issue",
+            "n8n_support_handle_issue",
         },
         AgentType.SALES.value: {
             "lookup_customer",
@@ -46,6 +48,7 @@ class ToolExecutionService:
             "update_lead",
             "lookup_knowledge",
             "create_activity",
+            "sales_process_lead",
             "n8n_process_lead",
             "n8n_send_followup",
         },
