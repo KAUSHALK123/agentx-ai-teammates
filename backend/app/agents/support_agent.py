@@ -75,6 +75,8 @@ class SupportAgent(BaseAgent):
         "prepare_customer_response",
         "issue_demo_refund",
         "escalate_support_case",
+        "support_handle_issue",
+        "n8n_support_handle_issue",
     ]
 
     def __init__(self, planner: Optional[AIPlanner] = None):
@@ -83,6 +85,41 @@ class SupportAgent(BaseAgent):
     async def plan(self, user_request: str, task_id: Optional[str] = None) -> StructuredTaskPlan:
         """Formulate an adaptive, structured execution plan for support inquiries."""
         tid = task_id or f"task_{uuid.uuid4().hex[:12]}"
+        req_lower = user_request.lower()
+        
+        # Check for explicit n8n support workflow request
+        if any(term in req_lower for term in ["n8n", "handle_support_issue", "support issue", "support workflow", "issue workflow"]):
+            steps = [
+                PlanStep(
+                    step_id=1,
+                    action="Identify customer profile and verify account status",
+                    type="tool_action",
+                    tool_id="lookup_customer",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=2,
+                    action="Orchestrate n8n customer support issue resolution workflow",
+                    type="tool_action",
+                    tool_id="support_handle_issue",
+                    status="PENDING",
+                ),
+                PlanStep(
+                    step_id=3,
+                    action="Log customer support activity and update ticket status",
+                    type="synthesis",
+                    tool_id="create_activity",
+                    status="PENDING",
+                ),
+            ]
+            return StructuredTaskPlan(
+                task_id=tid,
+                agent=self.agent_id,
+                objective=f"Process customer support issue via n8n: {user_request[:60]}",
+                steps=steps,
+                primary_tool="support_handle_issue",
+                plan_summary="Process support issue via n8n workflow",
+            )
         
         # Analyze support intent and entities
         classification = SupportAnalyzer.classify_intent(user_request)

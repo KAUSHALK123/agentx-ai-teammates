@@ -88,62 +88,64 @@ class N8nToolProvider:
                 "registered_workflows": list(APPROVED_N8N_WORKFLOWS.keys()),
             }
 
-    async def invoke_workflow(self, payload: N8nInvocationPayload) -> N8nExecutionResult:
-        """Invoke an approved n8n webhook workflow with security, idempotency, and retries."""
-        workflow_id = payload.workflow_id
+    def resolve_webhook_url(self, workflow_type: str) -> Optional[str]:
+        """Centrally map workflow type to environment variable URL or default base endpoint."""
+        settings = get_settings()
+        wf = workflow_type.lower().strip()
+        if wf in ("sales", "sales_process_lead", "01_sales_process_lead"):
+            return settings.n8n_sales_webhook_url or f"{self.base_url}/webhook/agentx-sales-process-lead"
+        elif wf in ("support", "support_handle_issue", "02_support_handle_issue"):
+            return settings.n8n_support_webhook_url or f"{self.base_url}/webhook/agentx-support-handle-issue"
+        elif wf in ("operations", "operations_daily_business_check", "operations_daily_check", "03_operations_daily_check"):
+            return settings.n8n_operations_webhook_url or f"{self.base_url}/webhook/agentx-operations-daily-check"
+        elif wf == "sales_send_followup":
+            return f"{self.base_url}/webhook/agentx-sales-send-followup"
+        return None
+
+    async def execute_workflow(self, workflow_type: str, payload: Any) -> N8nExecutionResult:
+        """Generic reusable workflow execution interface.
         
-        # 1. Whitelist Verification
-        wf_def = get_n8n_workflow_definition(workflow_id)
-        if not wf_def:
-            logger.error("Attempted invocation of unapproved workflow: %s", workflow_id)
-            return N8nExecutionResult(
-                success=False,
-                workflow=workflow_id,
-                task_id=payload.task_id,
-                lead_id=payload.lead_id,
-                error="N8N_VALIDATION_ERROR: Workflow is not in approved registry",
-            )
+        Supports execute_workflow(workflow_type, payload).
+        Maps workflow types centrally via env variables (N8N_SALES_WEBHOOK_URL, N8N_SUPPORT_WEBHOOK_URL, N8N_OPERATIONS_WEBHOOK_URL).
+        Returns normalized N8nExecutionResult with structured error codes on failure.
+        """
+        body = payload.model_dump() if hasattr(payload, "model_dump") else (payload if isinstance(payload, dict) else {})
 
-        # 2. Agent Authorization Check
-        if payload.agent_id != wf_def.allowed_agent:
-            logger.error(
-                "Agent '%s' is not authorized to invoke workflow '%s' (allowed: '%s')",
-                payload.agent_id,
-                workflow_id,
-                wf_def.allowed_agent,
-            )
-            return N8nExecutionResult(
-                success=False,
-                workflow=workflow_id,
-                task_id=payload.task_id,
-                lead_id=payload.lead_id,
-                error=f"N8N_VALIDATION_ERROR: Agent '{payload.agent_id}' unauthorized for workflow '{workflow_id}'",
-            )
-
-        # 3. Idempotency Check
-        cache_key = payload.idempotency_key or f"{payload.task_id}:{workflow_id}"
+        # Idempotency Check
+        task_id = body.get("task_id") or "task_general"
+        cache_key = body.get("idempotency_key") or f"{task_id}:{workflow_type}"
         async with self._lock:
             if cache_key in self._idempotency_cache:
                 logger.info("Returning cached result for idempotency key: %s", cache_key)
-                cached = self._idempotency_cache[cache_key]
-                return cached
+                return self._idempotency_cache[cache_key]
 
-        # 4. Invoke n8n Webhook
-        webhook_url = f"{self.base_url}/webhook/{wf_def.webhook_path}"
+        webhook_url = self.resolve_webhook_url(workflow_type)
+        if not webhook_url:
+            code = "N8N_CONFIG_MISSING"
+            msg = f"Webhook URL or configuration missing for workflow type '{workflow_type}'"
+            return N8nExecutionResult(
+                success=False,
+                status="failed",
+                workflow=workflow_type,
+                task_id=task_id,
+                error=f"{code}: {msg}",
+                error_details={"code": code, "message": msg},
+            )
+
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["X-N8N-API-KEY"] = self.api_key
 
-        body = payload.model_dump()
-
-        last_error: Optional[str] = None
+        last_code = "N8N_EXECUTION_FAILED"
+        last_message = "Workflow execution failed after retries"
         attempt = 0
+
         while attempt <= self.retry_attempts:
             attempt += 1
             try:
                 logger.info(
-                    "Invoking n8n workflow '%s' at '%s' (attempt %d/%d)",
-                    workflow_id,
+                    "Executing n8n workflow_type '%s' at '%s' (attempt %d/%d)",
+                    workflow_type,
                     webhook_url,
                     attempt,
                     self.retry_attempts + 1,
@@ -156,32 +158,55 @@ class N8nToolProvider:
                         raw_data = response.json()
                     except Exception as json_err:
                         logger.error("Failed to parse n8n response as JSON: %s", json_err)
+                        code = "N8N_MALFORMED_RESPONSE"
+                        msg = f"Invalid JSON response: {json_err}"
                         return N8nExecutionResult(
                             success=False,
-                            workflow=workflow_id,
-                            task_id=payload.task_id,
-                            lead_id=payload.lead_id,
-                            error=f"N8N_MALFORMED_RESPONSE: {json_err}",
+                            status="failed",
+                            workflow=workflow_type,
+                            task_id=task_id,
+                            error=f"{code}: {msg}",
+                            error_details={"code": code, "message": msg},
                         )
 
-                    # Handle list of items or single item from n8n
+                    # Handle array wrapper if returned by n8n
                     data = raw_data[0] if isinstance(raw_data, list) and raw_data else raw_data
                     if not isinstance(data, dict):
+                        code = "N8N_MALFORMED_RESPONSE"
+                        msg = "Expected dictionary response structure from n8n"
                         return N8nExecutionResult(
                             success=False,
-                            workflow=workflow_id,
-                            task_id=payload.task_id,
-                            lead_id=payload.lead_id,
-                            error="N8N_MALFORMED_RESPONSE: Expected dictionary response",
+                            status="failed",
+                            workflow=workflow_type,
+                            task_id=task_id,
+                            error=f"{code}: {msg}",
+                            error_details={"code": code, "message": msg},
                         )
 
-                    # Normalize result fields
                     success = bool(data.get("success", True))
+                    status = data.get("status", "completed" if success else "failed")
+                    approval_required = bool(data.get("approval_required") or data.get("requires_approval") or data.get("requires_human_review"))
+                    
+                    err_str: Optional[str] = None
+                    err_dict: Optional[Dict[str, Any]] = None
+                    if not success:
+                        raw_err = data.get("error")
+                        if isinstance(raw_err, dict):
+                            err_str = f"{raw_err.get('code', 'N8N_EXECUTION_FAILED')}: {raw_err.get('message', 'Workflow failed')}"
+                            err_dict = raw_err
+                        else:
+                            err_str = f"N8N_EXECUTION_FAILED: {raw_err or 'Workflow failed'}"
+                            err_dict = {"code": "N8N_EXECUTION_FAILED", "message": str(raw_err or "Workflow failed")}
+
                     result = N8nExecutionResult(
                         success=success,
-                        workflow=str(data.get("workflow", workflow_id)),
-                        task_id=data.get("task_id", payload.task_id),
-                        lead_id=data.get("lead_id", payload.lead_id),
+                        status=status,
+                        workflow=str(data.get("workflow", workflow_type)),
+                        task_id=data.get("task_id", task_id),
+                        lead_id=data.get("lead_id", body.get("lead_id")),
+                        customer_id=data.get("customer_id", body.get("customer_id")),
+                        order_id=data.get("order_id", body.get("order_id")),
+                        approval_required=approval_required,
                         lead_status=data.get("lead_status"),
                         qualification=data.get("qualification"),
                         actions=data.get("actions", []),
@@ -192,48 +217,103 @@ class N8nToolProvider:
                         requires_attention=data.get("requires_attention"),
                         metrics=data.get("metrics"),
                         report=data.get("report"),
-                        error=data.get("error") if not success else None,
+                        lead=data.get("lead"),
+                        issue=data.get("issue"),
+                        result=data.get("result"),
+                        error=err_str,
+                        error_details=err_dict,
                         timestamp=data.get("timestamp"),
                     )
 
-                    # Cache successful / final result for idempotency
-                    async with self._lock:
-                        self._idempotency_cache[cache_key] = result
+                    # Cache successful result for idempotency
+                    if success:
+                        async with self._lock:
+                            self._idempotency_cache[cache_key] = result
 
                     return result
 
                 elif response.status_code == 404:
-                    last_error = f"N8N_EXECUTION_FAILED: Webhook endpoint not registered or inactive (HTTP 404)"
+                    last_code = "N8N_EXECUTION_FAILED"
+                    last_message = f"Webhook endpoint not registered or inactive (HTTP 404) at {webhook_url}"
                     logger.warning("n8n returned 404 for %s", webhook_url)
-                    break  # Non-transient 404, don't retry blindly
+                    break
                 else:
-                    last_error = f"N8N_EXECUTION_FAILED: n8n returned HTTP {response.status_code}: {response.text[:200]}"
-                    logger.warning("n8n invocation failed with code %d: %s", response.status_code, response.text[:200])
+                    last_code = "N8N_HTTP_ERROR"
+                    last_message = f"n8n returned HTTP {response.status_code}: {response.text[:200]}"
+                    logger.warning("n8n execution failed with HTTP %d: %s", response.status_code, response.text[:200])
 
             except httpx.ConnectError as conn_err:
-                last_error = f"N8N_UNAVAILABLE: Connection refused at {self.base_url}"
+                last_code = "N8N_UNAVAILABLE"
+                last_message = f"Connection refused to n8n at {webhook_url}"
                 logger.warning("n8n connect error on attempt %d: %s", attempt, conn_err)
                 if "localhost" in self.base_url or "127.0.0.1" in self.base_url:
                     alt = await self._discover_fallback_port()
                     if alt:
-                        webhook_url = f"{self.base_url}/webhook/{wf_def.webhook_path}"
+                        webhook_url = self.resolve_webhook_url(workflow_type) or webhook_url
+
             except httpx.TimeoutException as time_err:
-                last_error = f"N8N_TIMEOUT: Request timed out after {self.timeout}s"
+                last_code = "N8N_TIMEOUT"
+                last_message = f"n8n request timed out after {self.timeout}s"
                 logger.warning("n8n timeout on attempt %d: %s", attempt, time_err)
+
             except Exception as exc:
-                last_error = f"N8N_EXECUTION_FAILED: Unexpected error: {exc}"
-                logger.exception("Unexpected error invoking n8n workflow %s: %s", workflow_id, exc)
+                last_code = "N8N_EXECUTION_FAILED"
+                last_message = f"Unexpected error during n8n execution: {exc}"
+                logger.exception("Unexpected error executing n8n workflow %s: %s", workflow_type, exc)
 
             if attempt <= self.retry_attempts:
                 await asyncio.sleep(0.5 * attempt)
 
         return N8nExecutionResult(
             success=False,
-            workflow=workflow_id,
-            task_id=payload.task_id,
-            lead_id=payload.lead_id,
-            error=last_error or "N8N_EXECUTION_FAILED: Workflow invocation failed",
+            status="failed",
+            workflow=workflow_type,
+            task_id=task_id,
+            lead_id=body.get("lead_id"),
+            customer_id=body.get("customer_id"),
+            order_id=body.get("order_id"),
+            error=f"{last_code}: {last_message}",
+            error_details={"code": last_code, "message": last_message},
         )
+
+    async def invoke_workflow(self, payload: N8nInvocationPayload) -> N8nExecutionResult:
+        """Invoke an approved n8n webhook workflow with security, idempotency, and retries."""
+        workflow_id = payload.workflow_id
+        
+        # 1. Whitelist Verification
+        wf_def = get_n8n_workflow_definition(workflow_id)
+        if not wf_def:
+            logger.error("Attempted invocation of unapproved workflow: %s", workflow_id)
+            return N8nExecutionResult(
+                success=False,
+                status="failed",
+                workflow=workflow_id,
+                task_id=payload.task_id,
+                lead_id=payload.lead_id,
+                error="N8N_VALIDATION_ERROR: Workflow is not in approved registry",
+                error_details={"code": "N8N_VALIDATION_ERROR", "message": "Workflow is not in approved registry"},
+            )
+
+        # 2. Agent Authorization Check
+        if payload.agent_id != wf_def.allowed_agent:
+            logger.error(
+                "Agent '%s' is not authorized to invoke workflow '%s' (allowed: '%s')",
+                payload.agent_id,
+                workflow_id,
+                wf_def.allowed_agent,
+            )
+            return N8nExecutionResult(
+                success=False,
+                status="failed",
+                workflow=workflow_id,
+                task_id=payload.task_id,
+                lead_id=payload.lead_id,
+                error=f"N8N_VALIDATION_ERROR: Agent '{payload.agent_id}' unauthorized for workflow '{workflow_id}'",
+                error_details={"code": "N8N_VALIDATION_ERROR", "message": f"Agent '{payload.agent_id}' unauthorized for workflow '{workflow_id}'"},
+            )
+
+        # 3. Use generic execute_workflow implementation
+        return await self.execute_workflow(workflow_id, payload)
 
 
 _n8n_provider: Optional[N8nToolProvider] = None

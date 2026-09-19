@@ -341,7 +341,7 @@ class DemoDataService(IDataService):
                 return None
             if status:
                 lead.status = status
-            if notes:
+            if notes and notes not in (lead.notes or ""):
                 lead.notes = f"{lead.notes} | {notes}" if lead.notes else notes
             return lead.model_copy()
 

@@ -133,13 +133,6 @@ class SalesAgent(BaseAgent):
                 ),
                 PlanStep(
                     step_id=3,
-                    action="Update CRM lead status with qualification outcome",
-                    type="tool_action",
-                    tool_id="update_lead",
-                    status="PENDING",
-                ),
-                PlanStep(
-                    step_id=4,
                     action="Log commercial activity and queue for follow-up review",
                     type="synthesis",
                     tool_id="create_activity",

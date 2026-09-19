@@ -272,10 +272,10 @@ async def test_sales_process_lead_tool_timeout_handling():
     with patch("httpx.AsyncClient.post", side_effect=httpx.TimeoutException("Timeout")):
         result = await tool.execute(lead_id="LEAD-001", task_id="task_timeout_lead")
 
-        assert result.success is True
-        assert result.data["success"] is True
+        assert result.success is False
+        assert result.data["status"] == "failed"
         assert result.data["lead_id"] == "LEAD-001"
-        assert result.data["activity_created"] is True
+        assert "N8N_TIMEOUT" in result.error or "timed out" in result.error
 
 
 # ==============================================================
@@ -290,13 +290,12 @@ async def test_sales_agent_plans_lead_processing():
     plan = await sales.plan(request, task_id="task_sales_plan_1")
 
     assert plan.agent == "sales"
-    assert len(plan.steps) == 4
+    assert len(plan.steps) == 3
 
     tool_sequence = [s.tool_id for s in plan.steps]
     assert tool_sequence == [
         "lookup_lead",
         "sales_process_lead",
-        "update_lead",
         "create_activity",
     ]
 

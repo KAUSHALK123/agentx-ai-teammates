@@ -38,6 +38,8 @@ class ToolExecutionService:
             "prepare_customer_response",
             "issue_demo_refund",
             "escalate_support_case",
+            "support_handle_issue",
+            "n8n_support_handle_issue",
         },
         AgentType.SALES.value: {
             "lookup_customer",
