@@ -20,7 +20,7 @@ import {
 import type { SupportAnalyzeResponse } from '../../types/api';
 
 export const SupportReviewView: React.FC = () => {
-  const { tasks, executeSupportResponse, setSelectedTaskId, setActiveTab, isBackendConnected } = useApp();
+  const { tasks, selectedTaskId, executeSupportResponse, setSelectedTaskId, setActiveTab, isBackendConnected } = useApp();
 
   // Test Scenarios Preset Definitions
   const testScenarios = [
@@ -54,8 +54,10 @@ export const SupportReviewView: React.FC = () => {
     }
   ];
 
+  const activeTask = tasks.find(t => t.id === selectedTaskId) || tasks.find(t => t.supportReview) || tasks[0];
+
   const [selectedScenario, setSelectedScenario] = useState(testScenarios[0]);
-  const [complaintText, setComplaintText] = useState(testScenarios[0].message);
+  const [complaintText, setComplaintText] = useState(activeTask?.supportReview?.complaintText || activeTask?.description || testScenarios[0].message);
 
   // Backend Analysis State
   const [analysis, setAnalysis] = useState<SupportAnalyzeResponse | null>(null);
@@ -66,8 +68,6 @@ export const SupportReviewView: React.FC = () => {
   const [customText, setCustomText] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
   const [executedStatus, setExecutedStatus] = useState<string | null>(null);
-
-  const activeTask = tasks.find(t => t.supportReview) || tasks[0];
 
   // Analyze complaint text via backend API
   const runBackendAnalysis = async (textToAnalyze: string, customerId?: string) => {
@@ -213,10 +213,10 @@ export const SupportReviewView: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">
-                  {analysis?.customer_context?.customer?.name || 'Sarah Jenkins'}
+                  {analysis?.customer_context?.customer?.name || activeTask?.supportReview?.customerName || 'Customer Profile'}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  {analysis?.customer_context?.customer?.email || 'sarah.j@acme.com'} • Ticket #TICK-8841
+                  {analysis?.customer_context?.customer?.email || activeTask?.supportReview?.customerEmail || 'support@agentx.ai'} • Ticket #{activeTask?.supportReview?.ticketId || activeTask?.id || 'TICK-8841'}
                 </p>
               </div>
             </div>
@@ -305,7 +305,7 @@ export const SupportReviewView: React.FC = () => {
             <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200">
               <span className="text-slate-500 font-medium">Customer ID:</span>
               <span className="font-mono font-bold text-indigo-600">
-                {analysis?.customer_context?.customer?.id || 'C001'}
+                {analysis?.customer_context?.customer?.id || (activeTask?.supportReview ? 'CUST-LIVE' : 'C001')}
               </span>
             </div>
 
@@ -319,21 +319,21 @@ export const SupportReviewView: React.FC = () => {
             <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200">
               <span className="text-slate-500 font-medium">Recent Order ID:</span>
               <span className="font-mono font-bold text-slate-800">
-                {analysis?.customer_context?.recent_orders?.[0]?.id || 'ORD-8821'}
+                {analysis?.customer_context?.recent_orders?.[0]?.id || activeTask?.supportReview?.orderId || 'ORD-8821'}
               </span>
             </div>
 
             <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200">
               <span className="text-slate-500 font-medium">Order Total:</span>
               <span className="font-bold text-emerald-600">
-                {analysis?.customer_context?.recent_orders?.[0]?.total || '$145.00'}
+                {analysis?.customer_context?.recent_orders?.[0]?.total || activeTask?.supportReview?.orderContext?.amount || '$145.00'}
               </span>
             </div>
 
             <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200">
               <span className="text-slate-500 font-medium">Shipping Status:</span>
               <span className="text-amber-700 font-mono text-[11px] font-semibold">
-                {analysis?.customer_context?.recent_orders?.[0]?.status || 'In Transit - Delayed'}
+                {analysis?.customer_context?.recent_orders?.[0]?.status || activeTask?.supportReview?.orderContext?.shippingStatus || 'In Transit - Delayed'}
               </span>
             </div>
 

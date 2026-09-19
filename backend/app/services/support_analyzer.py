@@ -74,6 +74,22 @@ class SupportAnalyzer:
         """Extract customer, order, and transaction tokens from text."""
         entities: Dict[str, Any] = {}
 
+        # Email Address (e.g. srshivaganesh@gmail.com)
+        email_match = re.search(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", text)
+        if email_match:
+            entities["customer_email"] = email_match.group(0)
+            entities["email"] = email_match.group(0)
+
+        # Customer Name patterns (e.g. Customer Sarah Jenkins, Customer Shiva Ganesh, from Shiva Ganesh)
+        name_match = re.search(r"\b(?:Customer|user|client|from)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)\b", text)
+        if name_match:
+            entities["customer_name"] = name_match.group(1).strip()
+            entities["name"] = name_match.group(1).strip()
+        elif email_match and "customer_name" not in entities:
+            handle = email_match.group(0).split("@")[0].replace(".", " ").replace("_", " ")
+            entities["customer_name"] = handle.title()
+            entities["name"] = handle.title()
+
         # Customer ID
         cust_match = re.search(r"\b(?:CUST-?|C)0*(\d+)\b", text, re.IGNORECASE)
         if cust_match:
@@ -97,6 +113,7 @@ class SupportAnalyzer:
                 entities["amount"] = val
 
         return entities
+
 
     @classmethod
     def classify_severity(

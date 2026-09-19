@@ -29,14 +29,14 @@ export const InputsView: React.FC = () => {
     {
       input_id: 'inp_refund_proof',
       type: 'pdf',
-      filename: 'sarah_jenkins_receipt_ORD8821.pdf',
-      content_reference: 'storage/sarah_jenkins_receipt_ORD8821.pdf',
+      filename: 'kaushal_receipt_ORD8821.pdf',
+      content_reference: 'storage/kaushal_receipt_ORD8821.pdf',
       size_bytes: 492000,
       mime_type: 'application/pdf',
-      extracted_text: 'PURCHASE RECEIPT #ORD-8821\nCustomer: Sarah Jenkins (sarah.j@acme.com)\nItem: Pro Audio Bundle ($145.00)\nTracking ID: 1Z999888777666\nDelivery Exception: Carrier delay, damaged package reported.',
+      extracted_text: 'PURCHASE RECEIPT #ORD-8821\nCustomer: Kaushal (k8849819@gmail.com)\nItem: Pro Audio Bundle ($145.00)\nTracking ID: 1Z999888777666\nDelivery Exception: Carrier delay, damaged package reported.',
       structured_data: {
         order_id: 'ORD-8821',
-        customer_email: 'sarah.j@acme.com',
+        customer_email: 'k8849819@gmail.com',
         amount: 145.0,
         currency: 'USD',
         sentiment: 'Dissatisfied'

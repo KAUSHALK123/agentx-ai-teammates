@@ -91,7 +91,7 @@ export const INITIAL_TASKS: TaskItem[] = [
   {
     id: 'TASK-9042',
     title: 'Investigate customer complaint: Order #ORD-8821 delayed with missing items',
-    description: 'Customer Sarah Jenkins (sarah.j@acme.com) reported high dissatisfaction with order #ORD-8821. Package delivered late and 1 item missing.',
+    description: 'Customer Kaushal (k8849819@gmail.com) reported high dissatisfaction with order #ORD-8821. Package delivered late and 1 item missing.',
     agentRole: 'support',
     agentName: 'Support Teammate',
     status: 'WAITING_FOR_APPROVAL',
@@ -107,7 +107,7 @@ export const INITIAL_TASKS: TaskItem[] = [
         label: 'Understand request & extract parameters',
         status: 'COMPLETED',
         timestamp: '19:04:12',
-        actionSummary: 'Extracted Customer: Sarah Jenkins, Order: ORD-8821, Issue: Shipping Delay & Missing Item',
+        actionSummary: 'Extracted Customer: Kaushal, Order: ORD-8821, Issue: Shipping Delay & Missing Item',
         details: { input: { rawText: 'Investigate customer complaint for Order ORD-8821' }, output: { orderId: 'ORD-8821', sentiment: 'Negative', priority: 'High' } }
       },
       {
@@ -127,7 +127,7 @@ export const INITIAL_TASKS: TaskItem[] = [
         toolUsed: 'customer_crm_api',
         timestamp: '19:04:16',
         actionSummary: 'Found Customer #CUST-4912. Status: Premium VIP. Lifetime Spend: $4,850.',
-        details: { input: { email: 'sarah.j@acme.com' }, output: { vipStatus: true, LTV: 4850 } }
+        details: { input: { email: 'k8849819@gmail.com' }, output: { vipStatus: true, LTV: 4850 } }
       },
       {
         id: 's4',
@@ -179,18 +179,18 @@ export const INITIAL_TASKS: TaskItem[] = [
       whyRequired: 'Action involves issuing store credit and sending an unedited external response to a VIP customer.',
       proposedAction: 'Send apology email, issue $25 store voucher, and initiate expedited reshipment of missing Wireless Headphones.',
       payloadPreview: {
-        to: 'sarah.j@acme.com',
+        to: 'k8849819@gmail.com',
         subject: 'Apology regarding Order #ORD-8821 + Free Reshipment Update',
-        voucherCode: 'AGX-SARAH25',
+        voucherCode: 'AGX-KAUSHAL25',
         replacementOrder: 'RES-9910',
-        message: 'Dear Sarah, We deeply apologize for the missing item in your recent order...'
+        message: 'Dear Kaushal, We deeply apologize for the missing item in your recent order...'
       },
       status: 'PENDING',
       createdAt: '10 minutes ago'
     },
     supportReview: {
-      customerName: 'Sarah Jenkins',
-      customerEmail: 'sarah.j@acme.com',
+      customerName: 'Kaushal',
+      customerEmail: 'k8849819@gmail.com',
       ticketId: 'TICK-8841',
       orderId: 'ORD-8821',
       sentiment: 'Very Negative',

@@ -33,7 +33,7 @@ export const CreateTaskView: React.FC = () => {
 
   const handleQuickPromptComplaint = () => {
     setTitle('Investigate customer complaint: Order #ORD-8821 delayed with missing items');
-    setDescription('Customer Sarah Jenkins (sarah.j@acme.com) reported high dissatisfaction with order #ORD-8821. Package delivered late and 1 item missing (Wireless Headphones). Please audit Shopify ERP, check refund limits, and formulate resolution.');
+    setDescription('Customer Kaushal (k8849819@gmail.com) reported high dissatisfaction with order #ORD-8821. Package delivered late and 1 item missing (Wireless Headphones). Please audit Shopify ERP, check refund limits, and formulate resolution.');
     setAgentRole('support');
     setPriority('HIGH');
     setFiles([

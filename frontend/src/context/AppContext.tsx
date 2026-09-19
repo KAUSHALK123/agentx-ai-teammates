@@ -146,6 +146,15 @@ function mapBackendTaskToFrontend(
     notes: bt.result.verification.summary || 'Deterministic verification verified all business and policy constraints.'
   } : undefined;
 
+  // Dynamic entity parsing from request and result
+  const emailMatch = bt.user_request.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}/);
+  const nameMatch = bt.user_request.match(/(?:Customer|user|client|from)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)/i);
+  const ordMatch = bt.user_request.match(/(?:ORD-?0*\d+|O0*\d+)/i);
+
+  const dynamicCustomerName = bt.result?.customer_name || (nameMatch ? nameMatch[1] : (emailMatch ? emailMatch[0].split('@')[0].replace('.', ' ').replace(/\b\w/g, l => l.toUpperCase()) : (bt.user_request.includes('Sarah') ? 'Sarah Jenkins' : 'Customer Profile')));
+  const dynamicCustomerEmail = bt.result?.customer_email || (emailMatch ? emailMatch[0] : (bt.user_request.includes('sarah.j') ? 'sarah.j@acme.com' : 'customer@example.com'));
+  const dynamicOrderId = bt.result?.order_id || (ordMatch ? ordMatch[0].toUpperCase() : (bt.user_request.includes('ORD-8821') ? 'ORD-8821' : 'ORD-1001'));
+
   return {
     id: bt.task_id,
     title,
@@ -164,26 +173,27 @@ function mapBackendTaskToFrontend(
     knowledgeUsed,
     verificationReport,
     supportReview: isComplaint ? {
-      customerName: 'Sarah Jenkins',
-      customerEmail: 'sarah.j@acme.com',
-      ticketId: 'TICK-9921',
-      orderId: 'ORD-8821',
+      customerName: dynamicCustomerName,
+      customerEmail: dynamicCustomerEmail,
+      ticketId: `TICK-${Math.abs(bt.task_id.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)) % 9000 + 1000}`,
+      orderId: dynamicOrderId,
       sentiment: 'Negative',
       intent: 'Complaint & Refund Inquiry',
       severity: 'High',
       complaintText: bt.user_request,
       orderContext: {
-        item: 'Pro Wireless Headphones',
-        amount: '$89.00',
+        item: 'Pro Audio Bundle / Core Order',
+        amount: '$145.00',
         orderDate: 'Sept 16, 2026',
         shippingStatus: 'In Transit - Delayed by Carrier',
         trackingNumber: '1Z999888777666',
-        lifetimeValue: '$3,200 (Gold VIP)'
+        lifetimeValue: '$3,200 (Active Customer)'
       },
       aiRecommendation: 'Dispatch immediate apology email with tracking update and issue $25 store credit voucher.',
       aiConfidence: 0.95
     } : undefined
   };
+
 }
 
 function transformExecutionSteps(exec: TaskExecutionDetailResponse): ExecutionStep[] {
@@ -576,9 +586,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const agentName = agents[resolvedRole]?.name || 'AgentX AI Teammate';
     const tempTaskId = `TASK-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    const isCustomerComplaint = params.title.toLowerCase().includes('complaint') || params.description.toLowerCase().includes('complaint');
+    const reqText = (params.title + ' ' + params.description);
+    const emailMatch = reqText.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}/);
+    const nameMatch = reqText.match(/(?:Customer|user|client|from)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)/i);
+    const ordMatch = reqText.match(/(?:ORD-?0*\d+|O0*\d+)/i);
+
+    const parsedCustomerName = nameMatch ? nameMatch[1] : (emailMatch ? emailMatch[0].split('@')[0].replace('.', ' ').replace(/\b\w/g, l => l.toUpperCase()) : (reqText.includes('Sarah') ? 'Sarah Jenkins' : 'Customer Profile'));
+    const parsedCustomerEmail = emailMatch ? emailMatch[0] : (reqText.includes('sarah.j') ? 'sarah.j@acme.com' : 'customer@example.com');
+    const parsedOrderId = ordMatch ? ordMatch[0].toUpperCase() : (reqText.includes('ORD-8821') ? 'ORD-8821' : 'ORD-1001');
+    const isCustomerComplaint = resolvedRole === 'support' || /complaint|support|dissatisfaction|refund|order|shipment/i.test(reqText);
 
     const newTask: TaskItem = {
+
       id: tempTaskId,
       title: params.title || 'Investigate customer request',
       description: params.description,
@@ -626,25 +645,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       ],
       supportReview: isCustomerComplaint ? {
-        customerName: 'Sarah Jenkins',
-        customerEmail: 'sarah.j@acme.com',
-        ticketId: 'TICK-9921',
-        orderId: 'ORD-8821',
+        customerName: parsedCustomerName,
+        customerEmail: parsedCustomerEmail,
+        ticketId: `TICK-${Math.floor(1000 + Math.random() * 9000)}`,
+        orderId: parsedOrderId,
         sentiment: 'Negative',
         intent: 'Complaint & Refund Inquiry',
         severity: 'High',
         complaintText: params.description,
         orderContext: {
-          item: 'Pro Wireless Headphones',
-          amount: '$89.00',
+          item: 'Pro Audio Bundle / Core Order',
+          amount: '$145.00',
           orderDate: 'Sept 16, 2026',
           shippingStatus: 'In Transit - Delayed by Carrier',
           trackingNumber: '1Z999888777666',
-          lifetimeValue: '$3,200 (Gold VIP)'
+          lifetimeValue: '$3,200 (Active Customer)'
         },
         aiRecommendation: 'Dispatch immediate apology email with tracking update and issue $25 store credit voucher.',
         aiConfidence: 0.95
       } : undefined
+
     };
 
     setTasks(prev => [newTask, ...prev]);

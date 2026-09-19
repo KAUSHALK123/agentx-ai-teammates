@@ -41,8 +41,8 @@ class AccessControlStore:
         )
         user_member = User(
             id="usr_demo_member",
-            email="sarah.j@acme.com",
-            full_name="Sarah Jenkins",
+            email="k8849819@gmail.com",
+            full_name="Kaushal",
         )
         self._users[user_owner.id] = user_owner
         self._users[user_member.id] = user_member

@@ -367,6 +367,9 @@ class TaskExecutionEngine:
         if agent.agent_id == "support":
             issue_desc = context.variables.get("issue_summary") or plan.objective
             cust_val = context.variables.get("customer_id") or "CUST-001"
+            cust_name = context.variables.get("customer_name") or context.variables.get("name")
+            cust_email = context.variables.get("customer_email") or context.variables.get("email")
+            ord_id = context.variables.get("order_id")
             resolution_desc = context.variables.get("proposed_resolution") or (
                 "Order status confirmed and investigated" if "order" in str(issue_desc).lower()
                 else "Issue investigated and resolution determined"
@@ -377,6 +380,9 @@ class TaskExecutionEngine:
                 "status": final_status.value,
                 "issue": issue_desc,
                 "customer": cust_val,
+                "customer_name": cust_name,
+                "customer_email": cust_email,
+                "order_id": ord_id,
                 "resolution": resolution_desc,
                 "actions_performed": actions_performed,
                 "verification": {
@@ -391,6 +397,7 @@ class TaskExecutionEngine:
                     else f"Task did not complete successfully: {verification.summary}"
                 ),
             }
+
         else:
             task.result = {
                 "task_id": task.task_id,
@@ -507,11 +514,28 @@ class TaskExecutionEngine:
         except Exception as exc:
             logger.warning("Error ingesting attached inputs into execution context: %s", exc)
 
+        # Email patterns (e.g. srshivaganesh@gmail.com)
+        email_match = re.search(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", req)
+        if email_match:
+            ctx.variables["customer_email"] = email_match.group(0)
+            ctx.variables["email"] = email_match.group(0)
+
+        # Customer Name patterns (e.g. Customer Shiva Ganesh, from Shiva Ganesh)
+        name_match = re.search(r"\b(?:Customer|user|client|from)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)\b", req)
+        if name_match:
+            ctx.variables["customer_name"] = name_match.group(1).strip()
+            ctx.variables["name"] = name_match.group(1).strip()
+        elif email_match and "customer_name" not in ctx.variables:
+            handle = email_match.group(0).split("@")[0].replace(".", " ").replace("_", " ")
+            ctx.variables["customer_name"] = handle.title()
+            ctx.variables["name"] = handle.title()
+
         # Customer ID patterns: CUST-001, C001
         cust_match = re.search(r"\b(?:CUST-0*(\d+)|C0*(\d+))\b", req, re.IGNORECASE)
         if cust_match:
             num = cust_match.group(1) or cust_match.group(2)
             ctx.variables["customer_id"] = f"CUST-{int(num):03d}"
+
 
         # Order ID patterns: ORD-5001, O5001
         ord_match = re.search(r"\b(?:ORD-0*(\d+)|O0*(\d+))\b", req, re.IGNORECASE)
@@ -763,6 +787,11 @@ class TaskExecutionEngine:
         if tool_id == "lookup_customer":
             if data.get("customer_id"):
                 context.variables["customer_id"] = data["customer_id"]
+            if data.get("name"):
+                context.variables["customer_name"] = data["name"]
+            if data.get("email"):
+                context.variables["customer_email"] = data["email"]
+
 
         elif tool_id == "lookup_order":
             if data.get("order_id"):
