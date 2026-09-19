@@ -641,7 +641,7 @@ class TaskExecutionEngine:
             if cid:
                 params["customer_id"] = cid
             else:
-                params["query"] = params.get("query") or user_request
+                params["query"] = params.get("query") or context.variables.get("customer_email") or context.variables.get("customer_name") or user_request
 
         elif tool_id == "lookup_order":
             oid = params.get("order_id") or context.variables.get("order_id")
@@ -787,9 +787,9 @@ class TaskExecutionEngine:
         if tool_id == "lookup_customer":
             if data.get("customer_id"):
                 context.variables["customer_id"] = data["customer_id"]
-            if data.get("name"):
+            if data.get("name") and not context.variables.get("customer_name"):
                 context.variables["customer_name"] = data["name"]
-            if data.get("email"):
+            if data.get("email") and not context.variables.get("customer_email"):
                 context.variables["customer_email"] = data["email"]
 
 
