@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: agentx-backend
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: N8N_BASE_URL
+        value: https://shivaganesh123.app.n8n.cloud
+      - key: N8N_SALES_WEBHOOK_URL
+        value: https://shivaganesh123.app.n8n.cloud/webhook/sales-process-lead
+      - key: N8N_SUPPORT_WEBHOOK_URL
+        value: https://shivaganesh123.app.n8n.cloud/webhook/support-handle-issue
+      - key: N8N_OPERATIONS_WEBHOOK_URL
+        value: https://shivaganesh123.app.n8n.cloud/webhook/operations-daily-check
+      - key: N8N_GMAIL_WEBHOOK_URL
+        value: https://shivaganesh123.app.n8n.cloud/webhook/gmail-send-approved-email
+      - key: N8N_CRM_WEBHOOK_URL
+        value: https://shivaganesh123.app.n8n.cloud/webhook/crm-lead-actions
+      - key: N8N_SUPPORT_CASE_WEBHOOK_URL
+        value: https://shivaganesh123.app.n8n.cloud/webhook/support-case-actions
+      - key: N8N_TIMEOUT_SECONDS
+        value: "30.0"
+      - key: CORS_ORIGINS
+        value: "*"
