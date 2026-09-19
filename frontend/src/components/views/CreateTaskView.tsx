@@ -43,11 +43,11 @@ export const CreateTaskView: React.FC = () => {
   };
 
   const handleQuickPromptSales = () => {
-    setTitle('Enrich lead data & draft outbound proposal for Enterprise prospect CloudCorp');
-    setDescription('Received contact request from VP of IT at CloudCorp (cloudcorp.io). Enrich company profile via Clearbit API, check Salesforce CRM for existing contacts, and draft custom proposal.');
+    setTitle('Qualify sales lead LEAD-001: Rajesh Khanna (Cyberdyne Tech) & draft proposal');
+    setDescription('Process inbound lead LEAD-001 for Rajesh Khanna (rajesh@cyberdyne.co.in) at Cyberdyne Tech. Inquired about 500 seat enterprise expansion. Qualify prospect and draft proposal.');
     setAgentRole('sales');
     setPriority('MEDIUM');
-    setFiles([{ name: 'cloudcorp_requirements.csv', size: '84 KB', type: 'CSV' }]);
+    setFiles([{ name: 'cyberdyne_expansion_requirements.csv', size: '84 KB', type: 'CSV' }]);
   };
 
   const handleToggleVoiceRecord = () => {

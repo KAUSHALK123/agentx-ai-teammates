@@ -27,7 +27,17 @@ class Settings(BaseSettings):
     n8n_base_url: str = "http://localhost:32768"
     n8n_api_key: Optional[str] = None
     n8n_webhook_timeout_seconds: float = 10.0
+    n8n_timeout_seconds: Optional[float] = None
     n8n_retry_attempts: int = 2
+
+    # Workflow Webhook URLs
+    n8n_sales_webhook_url: Optional[str] = None
+    n8n_support_webhook_url: Optional[str] = None
+    n8n_operations_webhook_url: Optional[str] = None
+
+    @property
+    def get_timeout(self) -> float:
+        return self.n8n_timeout_seconds if self.n8n_timeout_seconds is not None else self.n8n_webhook_timeout_seconds
 
     model_config = SettingsConfigDict(
         env_file=".env",
